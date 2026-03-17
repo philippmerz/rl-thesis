@@ -1,25 +1,3 @@
-"""
-Scripted (non-RL) baseline agent.
-
-Implements a simple heuristic policy that a naive human player might use:
-  - Flee from enemies that get dangerously close.
-  - When hunger drops below a threshold → forage for the nearest food.
-  - Otherwise → go to the nearest shelter and stay there.
-
-Enemy avoidance pre-empts the other behaviours: when one or more enemies
-are within the flee radius and the agent is not safely inside a shelter,
-the agent evaluates every possible action by how well it increases
-distance from threats, with a secondary preference for shelter tiles
-(which enemies cannot enter).
-
-The agent only sees entities within its observation radius (the same
-local window the RL agent receives), so it has no information advantage
-over the learned policy.
-
-This gives us a performance reference that doesn't depend on learned
-representations, so we can separate "how hard is the environment" from
-"how well does the RL agent learn".
-"""
 from __future__ import annotations
 
 from typing import List, Tuple, Optional, Set, Dict
@@ -114,40 +92,34 @@ def _nearby_enemies(
     ]
 
 
-class ScriptedForager:
+class HumanHeuristicAgent:
     """Forage-or-shelter heuristic agent with enemy avoidance.
 
-    Decision priority (highest first):
+    Decision priority:
 
-    1. **Flee** — if any enemy is within *flee_radius* and the agent is
+    1. Flee if any enemy is within flee_radius and the agent is
        not safely inside a shelter, pick the action that maximises
        distance from threats (preferring shelter tiles as escape targets).
-    2. **Forage** — if hunger ratio drops below *hunger_threshold*, move
+    2. Forage if hunger ratio drops below hunger_threshold, move
        toward the nearest visible food.
-    3. **Shelter** — otherwise, head for (or stay in) the nearest shelter.
+    3. Shelter otherwise, head for (or stay in) the nearest shelter.
 
-    Parameters
-    ----------
+    Parameters:
     hunger_threshold : float
-        Hunger *ratio* (0–1) below which the agent switches from shelter
-        mode to forage mode.  Default 0.5 means "start looking for food
-        when hunger is half-depleted".
+        Hunger ratio (0–1) below which the agent switches from shelter
+        mode to forage mode.
     flee_radius : int
         Manhattan distance within which an enemy triggers the flee
-        response.  Default 5 places the trigger two tiles beyond the
-        default ``enemy_vision_range`` of 3, giving the agent a buffer
-        before the enemy starts chasing.
+        response.
     """
 
     def __init__(
-        self, hunger_threshold: float = 0.5, flee_radius: int = 5,
+        self, hunger_threshold: float, flee_radius: int,
     ) -> None:
         self.hunger_threshold = hunger_threshold
         self.flee_radius = flee_radius
 
-    # ------------------------------------------------------------------
     # Public API (mirrors DQN agent's select_action signature loosely)
-    # ------------------------------------------------------------------
 
     def select_action(self, world: World) -> int:
         """Pick an action given the same local view as the RL agent.
@@ -158,9 +130,9 @@ class ScriptedForager:
         """
         return 1
 
-    # ------------------------------------------------------------------
+
+
     # Private helpers
-    # ------------------------------------------------------------------
 
     def _flee(
         self,
@@ -169,25 +141,6 @@ class ScriptedForager:
         radius: int,
         threats: List[Tuple[int, int]],
     ) -> int:
-        """Pick the safest action given nearby enemy *threats*.
-
-        Each candidate action is scored as a lexicographic tuple so that
-        higher-priority criteria always dominate:
-
-        1. **min_dist** — minimum Manhattan distance from the resulting
-           position to any threat (*maximised*).  This is the critical
-           survival metric: keep the nearest enemy as far away as possible.
-        2. **sum_dist** — total Manhattan distance to all threats
-           (*maximised*).  Breaks ties by preferring positions that are
-           generally far from *all* enemies, not just the closest.
-        3. **on_shelter** — 1 if the resulting position is a shelter tile,
-           0 otherwise (*maximised*).  Shelters are immune zones, so
-           stepping onto one is always preferred when distances are equal.
-        4. **shelter_prox** — negative distance to the nearest visible
-           shelter (*maximised*, i.e. closer shelter ⇒ higher value).
-           When everything else is tied, move toward the nearest escape
-           route.
-        """
         return 1
 
     def _forage(self, pos: Tuple[int, int], world: World, radius: int) -> int:
