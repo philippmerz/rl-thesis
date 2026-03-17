@@ -1,4 +1,5 @@
 """Configuration module for the survival environment and DQN training."""
+from rich.panel import p
 from mimetypes import init
 from dataclasses import dataclass, field
 from typing import Tuple, Optional
@@ -14,6 +15,11 @@ class WorldConfig:
     # World dimensions
     width: int = 64
     height: int = 64
+
+    @property
+    def num_cells(self) -> int:
+        """Total number of cells in the world."""
+        return self.width * self.height
     
     # Terrain parameters (uniform across the map)
     food_density: float = 0.15            # Probability of food spawning per tick per cell
@@ -31,8 +37,19 @@ class WorldConfig:
     starvation_damage: float = 0.5        # Health lost per tick when starving
     
     # Entity settings
-    max_enemy_density: int = 0.002        # Max enemies per cell (~8 enemies on 64x64 grid)
-    max_food_density: int = 0.009         # Max food per cell (~30 food items on 64x64 grid)
+    max_enemy_density: float = 0.002        # Max enemies per cell (~8 enemies on 64x64 grid)
+    max_food_density: float = 0.009         # Max food per cell (~30 food items on 64x64 grid)
+
+    @property
+    def max_enemies(self) -> int:
+        """Maximum number of enemies allowed in the world."""
+        return int(self.num_cells * self.max_enemy_density)
+    
+    @property
+    def max_food(self) -> int:
+        """Maximum number of food items allowed in the world."""
+        return int(self.num_cells * self.max_food_density)
+
     enemy_speed: float = 0.5              # Probability of enemies moving each tick
     enemy_vision_range: int = 3           # Manhattan distance within which enemies can see the agent
     shelter_protection: float = 1.0       # Damage reduction in shelter (0-1); 1.0 = full protection
