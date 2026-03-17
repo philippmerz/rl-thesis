@@ -33,7 +33,7 @@ class Direction(Enum):
     
     @classmethod
     def from_action(cls, action: int) -> Direction:
-        """Convert action index to direction (0=none, 1=up, 2=down, 3=left, 4=right)."""
+        """Convert action index to direction by enum order (0=none, 1=up, 2=down, 3=left, 4=right)."""
         return list(cls)[action]
 
 
