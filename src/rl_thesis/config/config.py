@@ -1,6 +1,4 @@
 """Configuration module for the survival environment and DQN training."""
-from rich.panel import p
-from mimetypes import init
 from dataclasses import dataclass, field
 from typing import Tuple, Optional
 

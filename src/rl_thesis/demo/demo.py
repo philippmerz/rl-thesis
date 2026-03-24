@@ -17,6 +17,7 @@ from pathlib import Path
 from rl_thesis.config.config import WorldConfig, HumanHeuristicConfig, VisualizationConfig
 from rl_thesis.agent.human_heuristic import HumanHeuristicAgent
 from rl_thesis.visualization.renderer import create_renderer
+from rl_thesis.environment.gym_env import SurvivalEnv
 
 def run_demo():
 
@@ -84,7 +85,7 @@ def run_demo():
                 if not renderer.render(world_state, metrics):
                     break
                 
-                time.sleep(VisualizationConfig.tick_duration_ms)
+                time.sleep(VisualizationConfig.tick_duration_ms / 1000)
                 
                 state = next_state
                 
