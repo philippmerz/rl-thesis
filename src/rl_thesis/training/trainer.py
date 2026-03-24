@@ -16,7 +16,6 @@ from tqdm import tqdm
 
 from rl_thesis.environment.gym_env import SurvivalEnv
 from rl_thesis.agent.dqn import DQNAgent
-from rl_thesis.training.metrics import MetricsTracker
 
 if TYPE_CHECKING:
     from rl_thesis.config.config import WorldConfig, DQNConfig
@@ -55,30 +54,16 @@ class Trainer:
     def train(
         self,
         total_steps: Optional[int] = None,
-        progress_bar: bool = True,
         eval_callback: Optional[Callable] = None,
-    ) -> MetricsTracker:
-        """
-        Run the training loop.
-        
-        Args:
-            total_steps: Total training steps (uses config if None)
-            progress_bar: Whether to show tqdm progress bar
-            eval_callback: Optional callback for evaluation visualization
-            
-        Returns:
-            MetricsTracker with all training metrics
-        """
+    ):
         total_steps = total_steps or self.dqn_config.total_timesteps
         
         # Initialize
-        state, _ = self.env.reset()
         episode_reward = 0.0
         episode_length = 0
         episode_count = 0
         
-        # Warmup phase: 
-        # This ensures stable gradients and diversifies initial experience
+        # wait for replay buffer to fill before training starts
         curr_buffer_size = len(self.agent.replay_buffer)
         min_buffer_size = self.dqn_config.min_buffer_size
         
@@ -86,8 +71,7 @@ class Trainer:
             warmup_steps = min_buffer_size - curr_buffer_size
             print(f"Warming up replay buffer with {warmup_steps} random actions...")
             
-            with tqdm(total=warmup_steps, disable=not progress_bar, desc="Warmup") as pbar_warmup:
-                # Use a specific warmup state loop to avoid mixing with main training vars
+            with tqdm(total=warmup_steps, desc="Warmup") as pbar_warmup:
                 w_state, _ = self.env.reset()
                 for _ in range(warmup_steps):
                     # Random action for exploration
@@ -104,14 +88,11 @@ class Trainer:
                     
                     pbar_warmup.update(1)
             
-            # Reset environment for main training
-            state, _ = self.env.reset()
         
-        # Progress bar
-        pbar = tqdm(total=total_steps, disable=not progress_bar, desc="Training")
+        state, _ = self.env.reset()
+        pbar = tqdm(total=total_steps, desc="Training")
         
         for step in range(total_steps):
-            # Select and execute action
             action = self.agent.select_action(state, training=True)
             next_state, reward, terminated, truncated, info = self.env.step(action)
             done = terminated or truncated
@@ -121,38 +102,19 @@ class Trainer:
             # so future rewards should still be bootstrapped (done=False for Q-learning)
             self.agent.store_transition(state, action, reward, next_state, terminated)
             
-            # Train
             loss = self.agent.train_step()
 
-            # Periodic plasticity diagnostics (gate on training steps, not env steps)
-            plasticity_interval = getattr(
-                self.config.plasticity, 'log_interval', 1000
-            )
-            train_steps = self.agent.updates_done
-            if (
-                loss is not None
-                and self.config.plasticity.enabled
-                and train_steps > 0
-                and train_steps % plasticity_interval == 0
-            ):
-                snap = self.agent.plasticity_tracker.snapshot(train_steps)
-                self.agent.plasticity_tracker.history.append(snap)
-            
-            # Update state
             state = next_state
             episode_reward += reward
             episode_length += 1
             
-            # Episode end
             if done:
                 episode_count += 1
                 episode_stats = self.env.get_episode_stats()
                 
-                # Callback
                 if self.on_episode_end:
                     self.on_episode_end(episode_count, episode_stats)
                 
-                # Reset
                 state, _ = self.env.reset()
                 episode_reward = 0.0
                 episode_length = 0
@@ -179,20 +141,12 @@ class Trainer:
             if step % 1000 == 0:
                 pbar.set_description(
                     f"Ep {episode_count} | "
-                    f"Avg R: {self.metrics.get_avg_reward():.1f} | "
                     f"ε: {self.agent.epsilon:.2f}"
                 )
         
         pbar.close()
         
-        # Final checkpoint
         self._save_checkpoint(total_steps, final=True)
-        
-        # Save plasticity diagnostics
-        if self.config.plasticity.enabled:
-            self._save_plasticity_diagnostics()
-        
-        return self.metrics
     
     def evaluate(
         self,
@@ -262,23 +216,11 @@ class Trainer:
         """Get the trained agent."""
         return self.agent
 
-    def _save_plasticity_diagnostics(self) -> None:
-        """Save plasticity tracker history to a JSON file."""
-        tracker = self.agent.plasticity_tracker
-        if not tracker.history:
-            return
-        data = tracker.history_to_dict()
-        path = self.log_dir / "plasticity_diagnostics.json"
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
-
-
 def train_agent(
     world_config: WorldConfig,
     dqn_config: DQNConfig,
     total_steps: int | None = None,
-    progress_bar: bool = True,
 ) -> DQNAgent:
     trainer = Trainer(world_config, dqn_config)
-    trainer.train(total_steps=total_steps, progress_bar=progress_bar)
+    trainer.train(total_steps=total_steps)
     return trainer.get_agent()
