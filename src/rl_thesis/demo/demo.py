@@ -1,44 +1,39 @@
-"""
-Interactive demo script to watch an agent play.
+from __future__ import annotations
 
-Runs a random or trained agent in the environment with visualization.
-Useful for testing the environment and visualization without training.
-
-Usage:
-    python demo.py              # Random agent
-    python demo.py --trained    # Use trained checkpoint
-"""
-import argparse
-import sys
 import time
-import random
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from rl_thesis.config.config import WorldConfig, HumanHeuristicConfig, VisualizationConfig
 from rl_thesis.agent.human_heuristic import HumanHeuristicAgent
 from rl_thesis.visualization.renderer import create_renderer
 from rl_thesis.environment.gym_env import SurvivalEnv
 
-def run_demo():
+if TYPE_CHECKING:
+    from rl_thesis.config.config import WorldConfig, HumanHeuristicConfig, VisualizationConfig
 
-    hhc = HumanHeuristicConfig()
-    scripted_agent = HumanHeuristicAgent(hunger_threshold=hhc.hunger_threshold, flee_radius=hhc.flee_radius)
-    agent_label = f"Human Heuristic Agent with threshold={hhc.hunger_threshold} and flee_radius={hhc.flee_radius})"
-    
-    # Create environment
-    config = WorldConfig()
-    env = SurvivalEnv()
-    
-    world_w, world_h = config.width, config.height
 
-    # Create renderer
-    renderer = create_renderer(
-        world_width=world_w,
-        world_height=world_h,
-        headless=False,
-        show_metrics=True,
+def run_demo(
+    world_config: WorldConfig,
+    heuristic_config: HumanHeuristicConfig,
+    vis_config: VisualizationConfig,
+):
+    scripted_agent = HumanHeuristicAgent(
+        hunger_threshold=heuristic_config.hunger_threshold,
+        flee_radius=heuristic_config.flee_radius,
     )
-    
+    agent_label = (
+        f"Human Heuristic Agent with threshold={heuristic_config.hunger_threshold}"
+        f" and flee_radius={heuristic_config.flee_radius})"
+    )
+
+    env = SurvivalEnv(world_config)
+
+    renderer = create_renderer(
+        config=vis_config,
+        world_width=world_config.width,
+        world_height=world_config.height,
+        headless=False,
+    )
+
     print("\n" + "=" * 40)
     print(f"Survival RL Demo — {agent_label}")
     print("=" * 40)
@@ -48,26 +43,22 @@ def run_demo():
     print("Green dots = Food")
     print("Gray squares = Shelters")
     print("=" * 40 + "\n")
-    
+
     try:
-        # Run 10 episodes
         for ep in range(1, 10 + 1):
             state, _ = env.reset()
             total_reward = 0
             step = 0
-            
+
             print(f"Episode {ep} starting...")
-            
+
             while renderer.is_running():
-                # Select action
                 action = scripted_agent.select_action(env._world)
-                
-                # Step
+
                 next_state, reward, terminated, truncated, info = env.step(action)
                 total_reward += reward
                 step += 1
-                
-                # Render
+
                 world_state = env.get_state()
                 metrics = {
                     'episodes': ep,
@@ -81,25 +72,25 @@ def run_demo():
                     'steps_per_sec': 0,
                     'training_time': 0,
                 }
-                
+
                 if not renderer.render(world_state, metrics):
                     break
-                
-                time.sleep(VisualizationConfig.tick_duration_ms / 1000)
-                
+
+                time.sleep(vis_config.tick_duration_ms / 1000)
+
                 state = next_state
-                
+
                 if terminated or truncated:
                     print(f"Episode {ep}: Reward={total_reward:.1f}, Steps={step}, Death={terminated}")
-                    time.sleep(1)  # Pause on death
+                    time.sleep(1)
                     break
-            
+
             if not renderer.is_running():
                 break
-    
+
     except KeyboardInterrupt:
         print("\nDemo interrupted.")
-    
+
     finally:
         renderer.close()
         print("Demo complete.")

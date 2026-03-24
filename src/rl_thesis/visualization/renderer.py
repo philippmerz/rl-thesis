@@ -6,11 +6,13 @@ for entities on a plain background.
 """
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 import numpy as np
 import pygame
-from rl_thesis.config.config import VisualizationConfig, WorldConfig
 from rl_thesis.environment.world import WorldState
+
+if TYPE_CHECKING:
+    from rl_thesis.config.config import VisualizationConfig
 
 
 class Renderer:
@@ -18,20 +20,15 @@ class Renderer:
     pygame renderer for the survival world.
     """
     
-    def __init__(self):
-        """
-        Initialize the renderer.
-        
-        Args:
-            world_width: Width of the world in cells
-            world_height: Height of the world in cells
-            config: Visualization configuration
-            show_metrics: Whether to show the metrics panel
-        """
-        
-        self.config = VisualizationConfig()
-        self.world_width = WorldConfig.width
-        self.world_height = WorldConfig.height
+    def __init__(
+        self,
+        config: VisualizationConfig,
+        world_width: int,
+        world_height: int,
+    ):
+        self.config = config
+        self.world_width = world_width
+        self.world_height = world_height
         
         # Calculate window size
         self.game_width = self.world_width * self.config.cell_size
@@ -244,25 +241,11 @@ class HeadlessRenderer:
 
 
 def create_renderer(
+    config: VisualizationConfig,
     world_width: int,
     world_height: int,
     headless: bool = False,
-    show_metrics: bool = False,
 ) -> Renderer | HeadlessRenderer:
-    """
-    Factory function to create a renderer.
-    
-    Args:
-        world_width: World width in cells
-        world_height: World height in cells
-        headless: If True, return a dummy renderer
-        show_metrics: Whether to show metrics panel
-        config: Visualization config
-        
-    Returns:
-        Renderer or HeadlessRenderer instance
-    """
     if headless:
         return HeadlessRenderer()
-    
-    return Renderer()
+    return Renderer(config, world_width, world_height)

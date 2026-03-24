@@ -3,11 +3,15 @@ Gym-style environment wrapper for the survival world.
 
 Follows standard step/reset API pattern.
 """
-from typing import Tuple, Dict, Optional, Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Tuple, Dict, Optional, Any
 import numpy as np
 
-from rl_thesis.config.config import WorldConfig
 from rl_thesis.environment.world import World, WorldState
+
+if TYPE_CHECKING:
+    from rl_thesis.config.config import WorldConfig
 
 
 class SurvivalEnv:
@@ -19,14 +23,14 @@ class SurvivalEnv:
     Fully self-contained, can run headlessly.
     """
     
-    def __init__(self):
-        self.config = WorldConfig()
+    def __init__(self, config: WorldConfig):
+        self.config = config
         self.initial_seed = self.config.initial_seed
         self._episode_seed = self.initial_seed
         self.max_steps = self.config.max_steps
-        
+
         # Create internal world
-        self._world = World()
+        self._world = World(config)
         
         # Track episode state
         self._current_step = 0
@@ -131,21 +135,5 @@ class SurvivalEnv:
         }
 
 
-def make_env(seed: int = 42, max_steps: int = 1000, **kwargs) -> SurvivalEnv:
-    """
-    Factory function to create a survival environment.
-    
-    Args:
-        seed: Random seed
-        max_steps: Maximum steps per episode (for truncation)
-        **kwargs: Additional arguments passed to WorldConfig
-        
-    Returns:
-        Configured SurvivalEnv instance
-    """
-    if kwargs:
-        config = WorldConfig(**kwargs)
-    else:
-        config = None
-    
-    return SurvivalEnv()
+def make_env(config: WorldConfig) -> SurvivalEnv:
+    return SurvivalEnv(config)

@@ -1,12 +1,13 @@
 from __future__ import annotations
-from curses.ascii import SP
 
 import random
 from dataclasses import dataclass, field
-from typing import List, Tuple, Dict, Set, Optional
+from typing import TYPE_CHECKING, List, Tuple, Dict, Set, Optional
 import numpy as np
 
-from rl_thesis.config.config import WorldConfig
+if TYPE_CHECKING:
+    from rl_thesis.config.config import WorldConfig
+
 from rl_thesis.environment.entities import (
     Agent, Enemy, Food, Shelter, Position, Direction
 )
@@ -55,8 +56,8 @@ class World:
     All logic is self-contained with no visualization dependencies.
     """
 
-    def __init__(self):
-        self.config = WorldConfig()
+    def __init__(self, config: WorldConfig):
+        self.config = config
         self.seed = self.config.initial_seed
 
         # Instance-level RNGs — avoid mutating global state (B5 fix).
