@@ -128,9 +128,25 @@ class HumanHeuristicAgent:
         observation radius defined in the world config, matching the RL
         agent's restricted field of view.
         """
-        return 1
+        agent = world.agent
+        pos = agent.position.as_tuple()
+        radius = world.config.observation_radius
 
+        # ---- Pre-emption: flee from nearby enemies ----
+        # Shelters provide full protection (enemies cannot enter them),
+        # so we only need to flee when the agent is exposed.
+        if not agent.is_in_shelter:
+            threats = _nearby_enemies(
+                pos, world._enemy_positions, self.flee_radius,
+            )
+            if threats:
+                return self._flee(pos, world, radius, threats)
 
+        # ---- Normal mode: forage vs shelter ----
+        if agent.hunger_ratio < self.hunger_threshold:
+            return self._forage(pos, world, radius)
+        else:
+            return self._seek_shelter(pos, world, radius)
 
     # Private helpers
 
@@ -141,12 +157,73 @@ class HumanHeuristicAgent:
         radius: int,
         threats: List[Tuple[int, int]],
     ) -> int:
-        return 1
+        """Pick the safest action given nearby enemy *threats*.
+
+        Each candidate action is scored as a lexicographic tuple so that
+        higher-priority criteria always dominate:
+
+        1. **min_dist** — minimum Manhattan distance from the resulting
+           position to any threat (*maximised*).  This is the critical
+           survival metric: keep the nearest enemy as far away as possible.
+        2. **sum_dist** — total Manhattan distance to all threats
+           (*maximised*).  Breaks ties by preferring positions that are
+           generally far from *all* enemies, not just the closest.
+        3. **on_shelter** — 1 if the resulting position is a shelter tile,
+           0 otherwise (*maximised*).  Shelters are immune zones, so
+           stepping onto one is always preferred when distances are equal.
+        4. **shelter_prox** — negative distance to the nearest visible
+           shelter (*maximised*, i.e. closer shelter ⇒ higher value).
+           When everything else is tied, move toward the nearest escape
+           route.
+        """
+        width = world.config.width
+        height = world.config.height
+        best_action = STAY
+        best_score = None
+
+        for action in range(_NUM_ACTIONS):
+            npos = _next_pos(pos, action, width, height)
+
+            min_d = min(_manhattan(npos, t) for t in threats)
+            sum_d = sum(_manhattan(npos, t) for t in threats)
+            on_shelter = 1 if npos in world._shelter_positions else 0
+
+            nearest_shelter = _nearest_in_radius(
+                npos, world._shelter_positions, radius,
+            )
+            shelter_prox = (
+                -_manhattan(npos, nearest_shelter)
+                if nearest_shelter is not None
+                else -(radius + 1)
+            )
+
+            score = (min_d, sum_d, on_shelter, shelter_prox)
+            if best_score is None or score > best_score:
+                best_score = score
+                best_action = action
+
+        return best_action
 
     def _forage(self, pos: Tuple[int, int], world: World, radius: int) -> int:
         """Move toward the nearest visible food item."""
+        target = _nearest_in_radius(pos, world._food_positions, radius)
+        if target is not None:
+            return _step_toward(pos, target)
+        # No visible food — try shelter; if no shelter either, just stay put
+        shelter = _nearest_in_radius(pos, world._shelter_positions, radius)
+        if shelter is not None:
+            return _step_toward(pos, shelter)
         return STAY
 
     def _seek_shelter(self, pos: Tuple[int, int], world: World, radius: int) -> int:
         """Move toward (or stay in) the nearest visible shelter tile."""
+        if pos in world._shelter_positions:
+            return STAY  # Already safe — don't move
+        target = _nearest_in_radius(pos, world._shelter_positions, radius)
+        if target is not None:
+            return _step_toward(pos, target)
+        # No visible shelters — forage for food; if nothing, stay put
+        food = _nearest_in_radius(pos, world._food_positions, radius)
+        if food is not None:
+            return _step_toward(pos, food)
         return STAY

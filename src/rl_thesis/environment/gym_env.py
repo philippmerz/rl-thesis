@@ -117,17 +117,6 @@ class SurvivalEnv:
         """Get direct access to the world (for advanced use)."""
         return self._world
     
-    def render(self) -> None:
-        """
-        Render is a no-op for this headless environment.
-        Use the visualization module separately if needed.
-        """
-        pass
-    
-    def close(self) -> None:
-        """Clean up resources (no-op for this env)."""
-        pass
-    
     def get_episode_stats(self) -> Dict[str, Any]:
         """Get statistics for the current/last episode."""
         agent = self._world.agent
