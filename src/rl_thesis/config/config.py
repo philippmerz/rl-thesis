@@ -126,8 +126,11 @@ class VisualizationConfig:
 class DQNConfig:
     checkpoint_dir: Path = Path("../../checkpoints")
     log_dir: Path = Path("../../logs")
-
-    cnn_channels: Tuple[int, ...] = (32, 64, 64)  # Channels per conv layer
+    
+    merge_hidden: int = 256
+    head_hidden: int = 128
+    
+    cnn_channels: Tuple[int, ...] = (32, 64, 64)
     
     # Training hyperparameters
     learning_rate: float = 1e-4 
@@ -158,22 +161,3 @@ class DQNConfig:
     
     # Device
     device: str = "auto"  # "auto" picks cuda > mps > cpu; override with "cuda"/"mps"/"cpu"
-    
-    # --- Plasticity mitigation settings ---
-    plasticity_mitigation: str = "none"   # "none", "reset", "redo", "continual_backprop",
-                                          # "weight_decay", "plasticity_injection"
-    
-    # Periodic last-layer resets (Nikishin et al., 2022)
-    reset_interval: int = 200_000         # Steps between resets (0 = disabled)
-    
-    # ReDo: dormant neuron recycling (Sokar et al., 2023)
-    redo_tau: float = 0.025               # Activation threshold for dormancy
-    redo_check_interval: int = 10_000     # Steps between dormancy checks
-    
-    # Continual backpropagation (Dohare et al., 2023)
-    cbp_replacement_rate: float = 0.001   # Fraction of neurons replaced per step
-    cbp_maturity_threshold: int = 1000    # Min age (in grad steps) before eligible
-    
-    # Plasticity injection (Nikishin et al., 2023)
-    pi_noise_scale: float = 0.01          # Scale of injected noise
-    pi_interval: int = 100_000            # Steps between injections
