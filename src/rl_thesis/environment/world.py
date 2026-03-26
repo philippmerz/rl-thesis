@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Tuple, Dict, Set, Optional
 import numpy as np
 
@@ -33,13 +33,6 @@ class WorldState:
     shelters: List[Tuple[int, int]]
     
     ticks: int
-    
-
-@dataclass
-class StepResult:
-    reward: float
-    done: bool
-    info: Dict
     
 
 class World:

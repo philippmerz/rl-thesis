@@ -6,7 +6,7 @@ with their properties and behaviors.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Tuple, Optional
 from enum import Enum, auto
 import random

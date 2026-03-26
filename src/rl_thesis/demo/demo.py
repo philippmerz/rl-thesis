@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from rl_thesis.agent.human_heuristic import HumanHeuristicAgent
 from rl_thesis.visualization.renderer import create_renderer
@@ -60,20 +60,7 @@ def run_demo(
                 step += 1
 
                 world_state = env.get_state()
-                metrics = {
-                    'episodes': ep,
-                    'avg_reward': total_reward,
-                    'avg_survival': step,
-                    'avg_food': info.get('food_eaten', 0) if 'food_eaten' in info else 0,
-                    'best_reward': total_reward,
-                    'best_survival': step,
-                    'epsilon': 0.0,
-                    'avg_q_value': 0,
-                    'steps_per_sec': 0,
-                    'training_time': 0,
-                }
-
-                if not renderer.render(world_state, metrics):
+                if not renderer.render(world_state):
                     break
 
                 time.sleep(vis_config.tick_duration_ms / 1000)

@@ -67,11 +67,11 @@ class DQNAgent:
             scalar_dim=scalar_dim,
         )
         self.policy_net = create_network(
-            observation_size, action_size, **net_kwargs,
+            action_size=action_size, **net_kwargs,
         ).to(self.device)
-        
+
         self.target_net = create_network(
-            observation_size, action_size, **net_kwargs,
+            action_size=action_size, **net_kwargs,
         ).to(self.device)
         
         # Copy initial weights

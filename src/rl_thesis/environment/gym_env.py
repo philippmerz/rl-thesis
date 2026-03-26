@@ -135,5 +135,3 @@ class SurvivalEnv:
         }
 
 
-def make_env(config: WorldConfig) -> SurvivalEnv:
-    return SurvivalEnv(config)

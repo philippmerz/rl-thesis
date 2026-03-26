@@ -114,8 +114,7 @@ class DQNetwork(nn.Module):
 
 
 def create_network(
-    input_size: int,
-    output_size: int,
+    action_size: int,
     merge_hidden: int,
     head_hidden: int,
     cnn_channels: Tuple[int, ...],
@@ -124,21 +123,7 @@ def create_network(
     spatial_channels: int,
     scalar_dim: int,
 ) -> DQNetwork:
-    """Factory function to build a CNN-encoder + Q-head DQN.
-
-    Args:
-        input_size:       Flat observation size.
-        output_size:      Number of actions.
-        merge_hidden:     Hidden size for the CNN merge layer.
-        head_hidden:      Hidden size for the Q-value head.
-        cnn_channels:     Conv channel sizes.
-        grid_h, grid_w:   Spatial grid dimensions.
-        spatial_channels: Number of spatial observation channels.
-        scalar_dim:       Number of non-spatial scalar features.
-
-    Returns:
-        A :class:`DQNetwork` instance.
-    """
+    """Factory function to build a CNN-encoder + Dueling-head DQN."""
     encoder = CNNEncoder(
         grid_h=grid_h,
         grid_w=grid_w,
@@ -150,5 +135,5 @@ def create_network(
 
     feature_size = encoder.output_size
 
-    head = DuelingHead(feature_size, output_size, hidden=head_hidden)
+    head = DuelingHead(feature_size, action_size, hidden=head_hidden)
     return DQNetwork(encoder, head)

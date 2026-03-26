@@ -116,16 +116,12 @@ class VisualizationConfig:
     health_bar_color: Tuple[int, int, int] = (220, 20, 60)  # Crimson
     hunger_bar_color: Tuple[int, int, int] = (255, 165, 0)  # Orange
     
-    # Metrics panel (when enabled)
-    metrics_width: int = 300              # Width of metrics panel
-    metrics_update_freq: int = 100        # Update metrics display every N steps
-
-    tick_duration_ms: int = 100           # For human observer
+    tick_duration_ms: int = 10           # For human observer
 
 @dataclass
 class DQNConfig:
-    checkpoint_dir: Path = Path("../../checkpoints")
-    log_dir: Path = Path("../../logs")
+    checkpoint_dir: Path = Path("checkpoints")
+    log_dir: Path = Path("logs")
     
     merge_hidden: int = 256
     head_hidden: int = 128
@@ -133,11 +129,12 @@ class DQNConfig:
     cnn_channels: Tuple[int, ...] = (32, 64, 64)
     
     # Training hyperparameters
-    learning_rate: float = 1e-4 
-    gamma: float = 0.99 
+    learning_rate: float = 1e-4
+    gamma: float = 0.99
     batch_size: int = 128
-    weight_decay: float = 0.0
-    
+    weight_decay: float = 1e-4
+    n_step: int = 3                       # Multi-step returns horizon
+
     # Replay buffer
     buffer_size: int = 100_000
     min_buffer_size: int = 10000          # Wait for samples before training
@@ -147,13 +144,12 @@ class DQNConfig:
     
     # Exploration (epsilon-greedy)
     epsilon_start: float = 1.0
-    epsilon_end: float = 0.1
-    epsilon_decay_steps: int = 2_000_000
+    epsilon_end: float = 0.05
+    epsilon_decay_steps: int = 4_000_000
     
     # Training duration
     total_timesteps: int = 5_000_000
-    max_episode_steps: int = 1000         # Max ticks per episode before truncation
-    
+
     # Checkpointing
     checkpoint_freq: int = 10_000
     eval_freq: int = 5_000

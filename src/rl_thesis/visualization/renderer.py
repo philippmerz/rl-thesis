@@ -6,8 +6,7 @@ for entities on a plain background.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, Tuple
-import numpy as np
+from typing import TYPE_CHECKING, Tuple
 import pygame
 from rl_thesis.environment.world import WorldState
 
@@ -48,7 +47,7 @@ class Renderer:
         self.small_font = pygame.font.Font(None, 18)
         
         # Pre-render background surface
-        self._bg_surface: Optional[pygame.Surface] = None
+        self._bg_surface: pygame.Surface | None = None
         
         # Running state
         self.is_open = True
@@ -59,18 +58,10 @@ class Renderer:
         surface.fill(self.config.background_color)  # Light green
         return surface
     
-    def render(
-        self,
-        state: WorldState,
-        metrics: Optional[dict] = None,
-    ) -> bool:
+    def render(self, state: WorldState) -> bool:
         """
         Render the current world state.
-        
-        Args:
-            state: Current world state snapshot
-            metrics: Optional metrics dict for the side panel
-            
+
         Returns:
             False if window was closed, True otherwise
         """

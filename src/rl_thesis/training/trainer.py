@@ -3,7 +3,6 @@ Main training loop: episode collection, evaluation, checkpointing, metrics loggi
 """
 from __future__ import annotations
 
-import json
 import shutil
 from collections import deque
 from pathlib import Path
