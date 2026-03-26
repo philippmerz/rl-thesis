@@ -64,18 +64,25 @@ class Trainer:
         recent_losses: deque[float] = deque(maxlen=1000)
         global_step = start_step
 
-        # Warmup: fill replay buffer with random transitions.
+        # Warmup: fill replay buffer before training begins.
+        # On fresh start, use random actions for exploration diversity.
+        # On resume, use the loaded policy to collect on-policy transitions.
+        resuming = start_step > 0
         curr_buffer_size = len(self.agent.replay_buffer)
         min_buffer_size = self.dqn_config.min_buffer_size
 
         if curr_buffer_size < min_buffer_size:
             warmup_steps = min_buffer_size - curr_buffer_size
-            print(f"Warming up replay buffer with {warmup_steps} random actions...")
+            label = "policy" if resuming else "random"
+            print(f"Warming up replay buffer with {warmup_steps} {label} actions...")
 
             with tqdm(total=warmup_steps, desc="Warmup") as pbar:
                 w_state, _ = self.env.reset()
                 for _ in range(warmup_steps):
-                    action = np.random.randint(self.env.action_size)
+                    if resuming:
+                        action = self.agent.select_action(w_state, training=False)
+                    else:
+                        action = np.random.randint(self.env.action_size)
                     w_next_state, reward, terminated, truncated, _ = self.env.step(action)
 
                     self.agent.store_transition(w_state, action, reward, w_next_state, terminated)
