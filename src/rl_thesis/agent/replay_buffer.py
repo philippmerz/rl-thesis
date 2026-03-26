@@ -1,263 +1,243 @@
+"""Prioritized experience replay with n-step returns.
+
+Observations are stored in pre-allocated numpy arrays for contiguous memory
+and fast vectorized sampling. The SumTree enables O(log n) prioritized
+sampling with importance-sampling weight correction.
+"""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Tuple, List, Optional
-import random
+from collections import deque
+from typing import Tuple
+
 import numpy as np
 import torch
 
 
-@dataclass
-class Transition:
-    state: np.ndarray
-    action: int
-    reward: float
-    next_state: np.ndarray
-    done: bool
-
-
-class ReplayBuffer:
-    """
-    Stores transitions in a circular buffer and samples
-    uniformly at random for training.
-    """
-    
-    def __init__(self, capacity: int):
-        self.capacity = capacity
-        self.buffer: List[Transition] = []
-        self.position = 0
-    
-    def push(
-        self,
-        state: np.ndarray,
-        action: int,
-        reward: float,
-        next_state: np.ndarray,
-        done: bool
-    ) -> None:
-        """
-        Add a transition to the buffer.
-        
-        Args:
-            state: Current observation
-            action: Action taken
-            reward: Reward received
-            next_state: Next observation
-            done: Whether episode ended
-        """
-        transition = Transition(state, action, reward, next_state, done)
-        
-        if len(self.buffer) < self.capacity:
-            self.buffer.append(transition)
-        else:
-            self.buffer[self.position] = transition
-        
-        self.position = (self.position + 1) % self.capacity
-    
-    def sample(self, batch_size: int) -> Tuple[torch.Tensor, ...]:
-        """
-        uniform random sample a batch of transitions
-        
-        Args:
-            batch_size: Number of transitions to sample
-            
-        Returns:
-            Tuple of (states, actions, rewards, next_states, dones) tensors
-        """
-        transitions = random.sample(self.buffer, batch_size)
-        
-        # Separate and stack into tensors
-        states = torch.FloatTensor(np.array([t.state for t in transitions]))
-        actions = torch.LongTensor([t.action for t in transitions])
-        rewards = torch.FloatTensor([t.reward for t in transitions])
-        next_states = torch.FloatTensor(np.array([t.next_state for t in transitions]))
-        dones = torch.FloatTensor([float(t.done) for t in transitions])
-        
-        return states, actions, rewards, next_states, dones
-    
-    def __len__(self) -> int:
-        return len(self.buffer)
-    
-    def is_ready(self, min_size: int) -> bool:
-        return len(self.buffer) >= min_size
-
-
 class SumTree:
+    """Binary tree where each parent is the sum of its children.
+
+    Supports O(log n) priority updates and proportional sampling.
+    All operations are iterative to avoid stack depth issues at scale.
+    Position management is the caller's responsibility — this class
+    is a pure priority structure.
     """
-    Naive sampling is too slow for many samples.
-    
-    Sum tree supports O(log n) priority updates and O(log n) sampling
-    proportional to priorities.
-    """
-    
+
     def __init__(self, capacity: int):
         self.capacity = capacity
-        # root to leaf, left to right: [parent, left_child, right_child, ...]
         self.tree = np.zeros(2 * capacity - 1, dtype=np.float64)
-        self.data = np.zeros(capacity, dtype=object)
-        self.data_pointer = 0
-        self.n_entries = 0
-    
-    def _propagate(self, idx: int, change: float) -> None:
-        """Propagate priority change up the tree."""
-        parent = (idx - 1) // 2
-        self.tree[parent] += change
-        if parent != 0:
-            self._propagate(parent, change)
-    
-    def _retrieve(self, idx: int, s: float) -> int:
-        """Find the leaf index for a given cumulative sum."""
-        left = 2 * idx + 1
-        right = left + 1
-        
-        if left >= len(self.tree):
-            return idx
-        
-        if s <= self.tree[left]:
-            return self._retrieve(left, s)
-        else:
-            return self._retrieve(right, s - self.tree[left])
-    
+
+    @property
     def total(self) -> float:
-        """Get the total priority sum."""
         return self.tree[0]
-    
-    def add(self, priority: float, data: Transition) -> None:
-        """Add a new sample with given priority."""
-        idx = self.data_pointer + self.capacity - 1
-        
-        self.data[self.data_pointer] = data
-        self.update(idx, priority)
-        
-        self.data_pointer = (self.data_pointer + 1) % self.capacity
-        self.n_entries = min(self.n_entries + 1, self.capacity)
-    
-    def update(self, idx: int, priority: float) -> None:
-        """Update the priority of a sample."""
-        change = priority - self.tree[idx]
-        self.tree[idx] = priority
-        self._propagate(idx, change)
-    
-    def get(self, s: float) -> Tuple[int, float, Transition]:
-        """Sample based on cumulative priority."""
-        idx = self._retrieve(0, s)
-        data_idx = idx - self.capacity + 1
-        return idx, self.tree[idx], self.data[data_idx]
+
+    def update(self, leaf_idx: int, priority: float) -> None:
+        change = priority - self.tree[leaf_idx]
+        self.tree[leaf_idx] = priority
+        idx = leaf_idx
+        while idx > 0:
+            idx = (idx - 1) // 2
+            self.tree[idx] += change
+
+    def sample(self, s: float) -> Tuple[int, float]:
+        """Find the leaf for cumulative sum *s*. Returns (leaf_idx, priority)."""
+        idx = 0
+        while True:
+            left = 2 * idx + 1
+            if left >= len(self.tree):
+                break
+            if s <= self.tree[left]:
+                idx = left
+            else:
+                s -= self.tree[left]
+                idx = left + 1
+        return idx, self.tree[idx]
 
 
-class PrioritizedReplayBuffer:
+class NStepPrioritizedBuffer:
+    """Memory-efficient prioritized replay buffer with n-step returns.
+
+    Stores transitions in pre-allocated numpy arrays (no Python-object-per-
+    transition overhead). Computes multi-step discounted returns on the fly
+    and stores the bootstrapping discount factor per transition to handle
+    variable-length returns at episode boundaries.
+    """
+
     def __init__(
         self,
         capacity: int,
+        obs_dim: int,
+        n_step: int,
+        gamma: float,
         alpha: float = 0.6,
         beta_start: float = 0.4,
-        beta_frames: int = 100000
+        beta_frames: int = 100_000,
     ):
-        """
-        Args:
-            capacity: Maximum number of transitions
-            alpha: Priority exponent (0 = uniform, 1 = full prioritization)
-            beta_start: Initial importance sampling exponent
-            beta_frames: Number of frames to anneal beta to 1.0
-        """
-        self.tree = SumTree(capacity)
         self.capacity = capacity
-        
+        self.obs_dim = obs_dim
+        self.n_step = n_step
+        self.gamma = gamma
+
+        # --- storage (pre-allocated) ---
+        self.states = np.zeros((capacity, obs_dim), dtype=np.float32)
+        self.actions = np.zeros(capacity, dtype=np.int64)
+        self.returns = np.zeros(capacity, dtype=np.float32)
+        self.next_states = np.zeros((capacity, obs_dim), dtype=np.float32)
+        self.dones = np.zeros(capacity, dtype=np.bool_)
+        self.gamma_ns = np.zeros(capacity, dtype=np.float32)
+
+        # --- priority tree ---
+        self.tree = SumTree(capacity)
+
+        # --- PER hyper-parameters ---
         self.alpha = alpha
         self.beta_start = beta_start
         self.beta_frames = beta_frames
         self.frame = 0
-        
-        # Small constant to avoid zero priorities
         self.epsilon = 1e-6
-        
-        # Track max priority for new samples
         self.max_priority = 1.0
-    
-    def _get_beta(self) -> float:
-        """Get current beta value (annealed)."""
-        progress = min(1.0, self.frame / self.beta_frames)
-        return self.beta_start + (1.0 - self.beta_start) * progress
-    
+
+        # --- write bookkeeping ---
+        self._write_pos = 0
+        self.size = 0
+
+        # --- n-step accumulator ---
+        # Each entry: (obs, action, reward, next_obs, done)
+        self._pending: deque[Tuple[np.ndarray, int, float, np.ndarray, bool]] = deque()
+
+
+    # Public API
     def push(
         self,
         state: np.ndarray,
         action: int,
         reward: float,
         next_state: np.ndarray,
-        done: bool
+        done: bool,
     ) -> None:
-        """Add a transition with max priority."""
-        transition = Transition(state, action, reward, next_state, done)
-        priority = self.max_priority ** self.alpha
-        self.tree.add(priority, transition)
-    
+        self._pending.append((state, action, reward, next_state, done))
+
+        if len(self._pending) >= self.n_step:
+            self._commit_oldest()
+
+        if done:
+            # Flush remaining pending transitions with truncated n-step returns
+            while self._pending:
+                self._commit_oldest()
+
     def sample(
-        self,
-        batch_size: int
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, 
-               torch.Tensor, np.ndarray, torch.Tensor]:
-        """
-        Sample a prioritized batch.
-        
+        self, batch_size: int
+    ) -> Tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        np.ndarray,
+        torch.Tensor,
+    ]:
+        """Sample a prioritized batch.
+
         Returns:
-            Tuple of (states, actions, rewards, next_states, dones, 
-                     tree_indices, importance_weights)
+            (states, actions, returns, next_states, dones, gamma_ns,
+             tree_indices, importance_weights)
         """
-        batch = []
-        indices = np.empty(batch_size, dtype=np.int32)
-        priorities = np.empty(batch_size, dtype=np.float32)
-        
-        # Divide priority space into segments
-        segment = self.tree.total() / batch_size
-        
-        beta = self._get_beta()
-        
+        indices = np.empty(batch_size, dtype=np.int64)
+        tree_indices = np.empty(batch_size, dtype=np.int64)
+        priorities = np.empty(batch_size, dtype=np.float64)
+
+        segment = self.tree.total / batch_size
+
         for i in range(batch_size):
-            # Sample from each segment
-            low = segment * i
-            high = segment * (i + 1)
-            s = random.uniform(low, high)
-            
-            idx, priority, data = self.tree.get(s)
-            batch.append(data)
-            indices[i] = idx
+            lo = segment * i
+            hi = segment * (i + 1)
+            s = np.random.uniform(lo, hi)
+            leaf_idx, priority = self.tree.sample(s)
+            data_idx = leaf_idx - self.capacity + 1
+            tree_indices[i] = leaf_idx
+            indices[i] = data_idx
             priorities[i] = priority
-        
-        # Calculate importance sampling weights
-        sampling_probs = priorities / self.tree.total()
-        weights = (self.tree.n_entries * sampling_probs) ** (-beta)
-        weights /= weights.max()  # Normalize
-        
-        # Convert to tensors
-        states = torch.FloatTensor(np.array([t.state for t in batch]))
-        actions = torch.LongTensor([t.action for t in batch])
-        rewards = torch.FloatTensor([t.reward for t in batch])
-        next_states = torch.FloatTensor(np.array([t.next_state for t in batch]))
-        dones = torch.FloatTensor([float(t.done) for t in batch])
-        weights = torch.FloatTensor(weights)
-        
+
+        beta = self._current_beta()
+        sampling_probs = priorities / self.tree.total
+        weights = (self.size * sampling_probs) ** (-beta)
+        weights /= weights.max()
+
         self.frame += 1
-        
-        return states, actions, rewards, next_states, dones, indices, weights
-    
-    def update_priorities(self, indices: np.ndarray, td_errors: np.ndarray) -> None:
-        """
-        Update priorities based on TD-errors.
-        
-        Args:
-            indices: Tree indices of sampled transitions
-            td_errors: Absolute TD-errors for each transition
-        """
-        for idx, td_error in zip(indices, td_errors):
-            priority = (abs(td_error) + self.epsilon) ** self.alpha
-            self.tree.update(idx, priority)
-            self.max_priority = max(self.max_priority, priority)
-    
+
+        return (
+            torch.as_tensor(self.states[indices]),
+            torch.as_tensor(self.actions[indices]),
+            torch.as_tensor(self.returns[indices]),
+            torch.as_tensor(self.next_states[indices]),
+            torch.as_tensor(self.dones[indices].astype(np.float32)),
+            torch.as_tensor(self.gamma_ns[indices]),
+            tree_indices,
+            torch.as_tensor(weights.astype(np.float32)),
+        )
+
+    def update_priorities(
+        self, tree_indices: np.ndarray, td_errors: np.ndarray
+    ) -> None:
+        priorities = (np.abs(td_errors) + self.epsilon) ** self.alpha
+        for idx, p in zip(tree_indices, priorities):
+            self.tree.update(int(idx), float(p))
+        self.max_priority = max(self.max_priority, float(priorities.max()))
+
     def __len__(self) -> int:
-        """Current number of stored transitions."""
-        return self.tree.n_entries
-    
+        return self.size
+
     def is_ready(self, min_size: int) -> bool:
-        """Check if buffer has enough samples."""
-        return self.tree.n_entries >= min_size
+        return self.size >= min_size
+
+    def discard_pending(self) -> None:
+        """Drop uncommitted n-step entries (e.g. after a forced env reset)."""
+        self._pending.clear()
+
+
+    # Internals
+    def _current_beta(self) -> float:
+        progress = min(1.0, self.frame / max(self.beta_frames, 1))
+        return self.beta_start + (1.0 - self.beta_start) * progress
+
+    def _commit_oldest(self) -> None:
+        """Compute the n-step return for the oldest pending transition and store it."""
+        entries = list(self._pending)
+        state, action, _, _, _ = entries[0]
+
+        n_step_return = 0.0
+        gamma_power = 1.0
+        terminal = False
+
+        for _, _, r, _, d in entries:
+            n_step_return += gamma_power * r
+            gamma_power *= self.gamma
+            if d:
+                terminal = True
+                break
+
+        # The bootstrap state is the *next_state* of the last contributing step
+        last_contributing = entries[min(len(entries), self.n_step) - 1]
+        if terminal:
+            # Find the terminal step
+            for entry in entries:
+                if entry[4]:  # done flag
+                    last_contributing = entry
+                    break
+        next_state = last_contributing[3]
+
+        pos = self._write_pos % self.capacity
+        self.states[pos] = state
+        self.actions[pos] = action
+        self.returns[pos] = n_step_return
+        self.next_states[pos] = next_state
+        self.dones[pos] = terminal
+        self.gamma_ns[pos] = gamma_power
+
+        leaf_idx = pos + self.capacity - 1
+        priority = self.max_priority ** self.alpha
+        self.tree.update(leaf_idx, priority)
+
+        self._write_pos += 1
+        self.size = min(self.size + 1, self.capacity)
+        self._pending.popleft()

@@ -136,12 +136,12 @@ class DQNConfig:
     n_step: int = 3                       # Multi-step returns horizon
 
     # Replay buffer
-    buffer_size: int = 100_000
-    min_buffer_size: int = 10000          # Wait for samples before training
-    
-    # Target network
-    target_update_freq: int = 500         # update target nw every N steps
-    
+    buffer_size: int = 500_000
+    min_buffer_size: int = 10_000         # Wait for samples before training
+
+    # Target network (Polyak averaging per training step)
+    tau: float = 0.005
+
     # Exploration (epsilon-greedy)
     epsilon_start: float = 1.0
     epsilon_end: float = 0.05

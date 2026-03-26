@@ -10,9 +10,8 @@ import os
 import shutil
 import tempfile
 import time
-from collections import deque
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Any
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -20,8 +19,8 @@ import torch.nn as nn
 import torch.optim as optim
 
 from rl_thesis.config.config import DQNConfig
-from rl_thesis.agent.network import create_network, DQNetwork
-from rl_thesis.agent.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
+from rl_thesis.agent.network import create_network
+from rl_thesis.agent.replay_buffer import NStepPrioritizedBuffer
 
 
 class DQNAgent:
@@ -110,9 +109,12 @@ class DQNAgent:
             final_div_factor=10,
         )
         
-        self.replay_buffer = PrioritizedReplayBuffer(
+        self.replay_buffer = NStepPrioritizedBuffer(
             capacity=self.config.buffer_size,
-            beta_frames=self.config.epsilon_decay_steps
+            obs_dim=observation_size,
+            n_step=self.config.n_step,
+            gamma=self.config.gamma,
+            beta_frames=self.config.epsilon_decay_steps,
         )
         
         # Exploration
@@ -125,10 +127,6 @@ class DQNAgent:
         # Training state
         self.steps_done = 0
         self.updates_done = 0
-        
-        # Metrics tracking (bounded to prevent memory growth in long runs)
-        self.loss_history: deque[float] = deque(maxlen=10000)
-        self.q_value_history: deque[float] = deque(maxlen=10000)
 
     def _setup_device(self) -> torch.device:
         """Setup the compute device (MPS, CUDA, or CPU)."""
@@ -181,9 +179,13 @@ class DQNAgent:
         action: int,
         reward: float,
         next_state: np.ndarray,
-        done: bool
+        done: bool,
     ) -> None:
         self.replay_buffer.push(state, action, reward, next_state, done)
+
+    def discard_pending(self) -> None:
+        """Drop uncommitted n-step transitions (call after forced env resets)."""
+        self.replay_buffer.discard_pending()
     
     def train_step(self) -> Optional[float]:
         """
@@ -201,41 +203,41 @@ class DQNAgent:
         if self.lr_scheduler._step_count <= self.lr_scheduler.total_steps:
             self.lr_scheduler.step()
         
-        # Update target network periodically
-        if self.updates_done % self.config.target_update_freq == 0:
-            self._update_target_network()
+        self._soft_update_target()
 
-        self.loss_history.append(loss)
-        
         return loss
     
     def _compute_td(
         self,
         states: torch.Tensor,
         actions: torch.Tensor,
-        rewards: torch.Tensor,
+        returns: torch.Tensor,
         next_states: torch.Tensor,
         dones: torch.Tensor,
+        gamma_ns: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Compute current Q-values and Double-DQN targets.
+        """Compute current Q-values and n-step Double-DQN targets.
+
+        Args:
+            returns: Pre-computed n-step discounted returns R_n.
+            gamma_ns: Per-sample γ^n discount for bootstrapping.
 
         Returns:
             (current_q, target_q) — both shape (batch,).
         """
-        rewards = torch.clamp(rewards, -100.0, 100.0)
+        returns = torch.clamp(returns, -100.0, 100.0)
 
         current_q = self.policy_net(states).gather(
             1, actions.unsqueeze(1)
         ).squeeze(1)
 
         with torch.no_grad():
-            # Double DQN: select actions with policy net, evaluate with target net
             next_actions = self.policy_net(next_states).argmax(dim=1)
             next_q = self.target_net(next_states).gather(
                 1, next_actions.unsqueeze(1)
             ).squeeze(1)
             next_q = torch.clamp(next_q, -1000.0, 1000.0)
-            target_q = rewards + (1 - dones) * self.config.gamma * next_q
+            target_q = returns + (1 - dones) * gamma_ns * next_q
 
         return current_q, target_q
 
@@ -250,39 +252,37 @@ class DQNAgent:
         return tuple(t.to(self.device) for t in tensors)
 
     def _train_step_prioritized(self) -> float:
-        """Training step with prioritized experience replay."""
-        (states, actions, rewards, next_states, dones,
-         indices, weights) = self.replay_buffer.sample(self.config.batch_size)
-        states, actions, rewards, next_states, dones, weights = self._to_device(
-            states, actions, rewards, next_states, dones, weights
+        """Training step with prioritized n-step experience replay."""
+        (states, actions, returns, next_states, dones,
+         gamma_ns, tree_indices, weights) = self.replay_buffer.sample(
+            self.config.batch_size
+        )
+        states, actions, returns, next_states, dones, gamma_ns, weights = (
+            self._to_device(states, actions, returns, next_states, dones, gamma_ns, weights)
         )
 
         current_q, target_q = self._compute_td(
-            states, actions, rewards, next_states, dones
+            states, actions, returns, next_states, dones, gamma_ns
         )
 
-        # Importance-weighted loss
         td_errors = (current_q - target_q).detach().cpu().numpy()
         element_wise_loss = nn.functional.smooth_l1_loss(
             current_q, target_q, reduction='none'
         )
         loss = (element_wise_loss * weights).mean()
 
-        self.q_value_history.append(current_q.mean().item())
         self._optimize(loss)
 
-        self.replay_buffer.update_priorities(indices, td_errors)
+        self.replay_buffer.update_priorities(tree_indices, td_errors)
 
         return loss.item()
     
-    def _update_target_network(self) -> None:
-        """Hard update of target network weights."""
-        self.target_net.load_state_dict(self.policy_net.state_dict())
+    def _soft_update_target(self) -> None:
+        """Polyak-average target network toward policy network."""
+        tau = self.config.tau
+        for tp, pp in zip(self.target_net.parameters(), self.policy_net.parameters()):
+            tp.data.mul_(1.0 - tau).add_(pp.data, alpha=tau)
 
-    def get_current_lr(self) -> float:
-        """Get the current learning rate from scheduler."""
-        return self.lr_scheduler.get_last_lr()[0]
-    
     def save(self, path: str, max_retries: int = 3) -> None:
         """
         Save agent state to disk with retry logic and atomic writes.
@@ -390,17 +390,3 @@ class DQNAgent:
         agent.load(path)
         return agent
     
-    def get_stats(self) -> Dict[str, Any]:
-        """Get current training statistics."""
-        recent_losses = self.loss_history[-100:] if self.loss_history else [0]
-        recent_q = self.q_value_history[-100:] if self.q_value_history else [0]
-        
-        return {
-            'steps': self.steps_done,
-            'updates': self.updates_done,
-            'epsilon': self.epsilon,
-            'avg_loss': np.mean(recent_losses),
-            'avg_q_value': np.mean(recent_q),
-            'buffer_size': len(self.replay_buffer),
-            'device': str(self.device),
-        }
