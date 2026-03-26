@@ -56,7 +56,7 @@ class Renderer:
     def _create_background_surface(self) -> pygame.Surface:
         """Create a plain background surface."""
         surface = pygame.Surface((self.game_width, self.game_height))
-        surface.fill((144, 238, 144))  # Light green
+        surface.fill(self.config.background_color)  # Light green
         return surface
     
     def render(
