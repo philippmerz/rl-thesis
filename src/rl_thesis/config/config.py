@@ -22,7 +22,7 @@ class WorldConfig:
     
     # Terrain parameters (uniform across the map)
     food_density: float = 0.15            # Probability of food spawning per tick per cell
-    shelter_density: float = 0.02         # Probability of shelter per cell during generation
+    shelter_density: float = 0.01         # Probability of shelter per cell during generation
     enemy_density: float = 0.01           # Base enemy density for spawn checks
     food_value: float = 20.0              # Nutrition value of all food items
     enemy_damage: float = 15.0            # Damage dealt by all enemies
@@ -105,7 +105,7 @@ class VisualizationConfig:
     fps: int = 30                         # Target frames per second
     
     # Colors (RGB)
-    background_color: Tuple[int, int, int] = (30, 30, 30)
+    background_color: Tuple[int, int, int] = (0, 0, 0)
     agent_color: Tuple[int, int, int] = (0, 191, 255)       # Deep sky blue
     enemy_color: Tuple[int, int, int] = (255, 69, 0)        # Red-orange
     food_color: Tuple[int, int, int] = (50, 205, 50)        # Lime green
