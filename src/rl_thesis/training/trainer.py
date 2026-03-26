@@ -20,7 +20,8 @@ if TYPE_CHECKING:
 
 
 class Trainer:
-    def __init__(self, world_config: WorldConfig, dqn_config: DQNConfig):
+    def __init__(self, world_config: WorldConfig, dqn_config: DQNConfig,
+                 checkpoint_path: Optional[str] = None):
         self.world_config = world_config
         self.dqn_config = dqn_config
 
@@ -42,6 +43,10 @@ class Trainer:
             scalar_dim=world_config.num_scalars,
         )
 
+        if checkpoint_path:
+            self.agent.load(checkpoint_path)
+            print(f"Resumed from {checkpoint_path} (step {self.agent.steps_done:,})")
+
         self.on_episode_end: Optional[Callable[[int, Dict], None]] = None
         self.on_checkpoint: Optional[Callable[[int, str], None]] = None
 
@@ -51,12 +56,13 @@ class Trainer:
         eval_callback: Optional[Callable] = None,
     ) -> MetricsLogger:
         total_steps = total_steps or self.dqn_config.total_timesteps
+        start_step = self.agent.steps_done
 
         episode_reward = 0.0
         episode_length = 0
-        episode_count = 0
+        episode_count = self.metrics.episode_count
         recent_losses: deque[float] = deque(maxlen=1000)
-        global_step = 0
+        global_step = start_step
 
         # Warmup: fill replay buffer with random transitions.
         curr_buffer_size = len(self.agent.replay_buffer)
@@ -84,9 +90,9 @@ class Trainer:
 
         self.agent.discard_pending()
         state, _ = self.env.reset()
-        pbar = tqdm(total=total_steps, desc="Training")
+        pbar = tqdm(total=total_steps, initial=start_step, desc="Training")
 
-        for step in range(total_steps):
+        for step in range(start_step, total_steps):
             global_step = step
             action = self.agent.select_action(state, training=True)
             next_state, reward, terminated, truncated, info = self.env.step(action)
@@ -214,8 +220,3 @@ class Trainer:
         shutil.copy(path, latest_path)
         return path
 
-    def load_checkpoint(self, path: str) -> None:
-        self.agent.load(path)
-
-    def get_agent(self) -> DQNAgent:
-        return self.agent

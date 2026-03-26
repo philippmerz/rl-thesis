@@ -43,13 +43,27 @@ class MetricsLogger:
         self._episode_path = log_dir / "episodes.csv"
         self._start_time = time.monotonic()
 
+        # Count existing rows before opening (for resume support).
+        self._episode_count = self._count_rows(self._episode_path)
+
         self._eval_writer = self._open_csv(self._eval_path, _EVAL_FIELDS)
         self._episode_writer = self._open_csv(self._episode_path, _EPISODE_FIELDS)
 
         self._best_eval_reward = float("-inf")
         self._best_survival = 0
         self._latest_eval: Dict[str, Any] = {}
-        self._episode_count = 0
+
+    @property
+    def episode_count(self) -> int:
+        return self._episode_count
+
+    @staticmethod
+    def _count_rows(path: Path) -> int:
+        """Count data rows in an existing CSV (0 if missing or empty)."""
+        if not path.exists() or path.stat().st_size == 0:
+            return 0
+        with open(path) as f:
+            return max(0, sum(1 for _ in f) - 1)  # subtract header
 
     def _open_csv(self, path: Path, fields: list[str]) -> csv.DictWriter:
         handle = open(path, "a", newline="")

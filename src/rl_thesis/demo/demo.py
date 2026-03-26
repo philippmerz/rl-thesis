@@ -15,15 +15,23 @@ def run_demo(
     world_config: WorldConfig,
     heuristic_config: HumanHeuristicConfig,
     vis_config: VisualizationConfig,
+    checkpoint_path: Optional[str] = None,
 ):
-    scripted_agent = HumanHeuristicAgent(
-        hunger_threshold=heuristic_config.hunger_threshold,
-        flee_radius=heuristic_config.flee_radius,
-    )
-    agent_label = (
-        f"Human Heuristic Agent with threshold={heuristic_config.hunger_threshold}"
-        f" and flee_radius={heuristic_config.flee_radius})"
-    )
+    if checkpoint_path is not None:
+        from rl_thesis.agent.dqn import DQNAgent
+
+        dqn_agent = DQNAgent.from_checkpoint(checkpoint_path)
+        agent_label = f"DQN Agent (checkpoint: {checkpoint_path})"
+    else:
+        dqn_agent = None
+        scripted_agent = HumanHeuristicAgent(
+            hunger_threshold=heuristic_config.hunger_threshold,
+            flee_radius=heuristic_config.flee_radius,
+        )
+        agent_label = (
+            f"Human Heuristic Agent with threshold={heuristic_config.hunger_threshold}"
+            f" and flee_radius={heuristic_config.flee_radius})"
+        )
 
     env = SurvivalEnv(world_config)
 
@@ -53,7 +61,10 @@ def run_demo(
             print(f"Episode {ep} starting...")
 
             while renderer.is_running():
-                action = scripted_agent.select_action(env._world)
+                if dqn_agent is not None:
+                    action = dqn_agent.select_action(state, training=False)
+                else:
+                    action = scripted_agent.select_action(env._world)
 
                 next_state, reward, terminated, truncated, info = env.step(action)
                 total_reward += reward
