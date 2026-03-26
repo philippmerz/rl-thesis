@@ -3,4 +3,10 @@ __pycache__/
 *.py[cod]
 
 CLAUDE.md
-MEMORY.md
+.claude
+.vscode
+checkpoints
+logs
+latex/out
+.venv
+.DS_Store
