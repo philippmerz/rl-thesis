@@ -69,6 +69,7 @@ class MetricsLogger:
         self._best_eval_reward = float("-inf")
         self._best_survival = 0
         self._latest_eval: Dict[str, Any] = {}
+        self._closed = False
 
     @property
     def episode_count(self) -> int:
@@ -169,18 +170,26 @@ class MetricsLogger:
         }
 
     def close(self) -> None:
+        if self._closed:
+            return
         for h in getattr(self, "_handles", []):
+            if h.closed:
+                continue
             h.flush()
             h.close()
+        self._closed = True
 
     def _flush_eval(self) -> None:
-        self._handles[0].flush()
+        if not self._closed and not self._handles[0].closed:
+            self._handles[0].flush()
 
     def _flush_episodes(self) -> None:
-        self._handles[1].flush()
+        if not self._closed and not self._handles[1].closed:
+            self._handles[1].flush()
 
     def _flush_system(self) -> None:
-        self._handles[2].flush()
+        if not self._closed and not self._handles[2].closed:
+            self._handles[2].flush()
 
 
 def _get_rss_bytes() -> int:

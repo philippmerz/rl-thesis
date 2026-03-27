@@ -63,7 +63,6 @@ def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
     except KeyboardInterrupt:
         print("\n\nInterrupted. Saving checkpoint...")
         trainer.save_manual_checkpoint(trainer.agent.steps_done)
-        trainer.metrics.close()
         print("Saved.")
 
     finally:
