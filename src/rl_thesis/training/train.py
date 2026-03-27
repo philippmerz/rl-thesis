@@ -30,6 +30,7 @@ def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
         log_dir=run_dir / "logs",
     )
     world_config = make_world_config(config_name, seed=seed)
+    trainer = Trainer(world_config, dqn, checkpoint_path=checkpoint)
 
     weights = describe_config(config_name)
     print("=" * 60)
@@ -41,10 +42,9 @@ def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
     for k, v in weights.items():
         print(f"  {k}: {v}")
     print("-" * 60)
-    print(f"Device: {dqn.device}  |  Steps: {dqn.total_timesteps:,}")
+    print(f"Device: {trainer.agent.device}  |  Steps: {dqn.total_timesteps:,}")
     print("=" * 60)
 
-    trainer = Trainer(world_config, dqn, checkpoint_path=checkpoint)
     if not checkpoint:
         trainer.metrics.save_run_config(config_name, seed, world_config, dqn)
 
