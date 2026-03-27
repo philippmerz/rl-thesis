@@ -152,16 +152,23 @@ class Trainer:
 
             # Periodic checkpointing
             if step > 0 and step % self.dqn_config.checkpoint_freq == 0:
-                checkpoint_path = self._save_checkpoint(step)
+                checkpoint_path = self._save_periodic_checkpoint(step)
                 if self.on_checkpoint:
                     self.on_checkpoint(step, checkpoint_path)
+
+            if step > 0 and step % self.dqn_config.eval_freq == 0:
+                self.metrics.log_system(
+                    step=step,
+                    episode=episode_count,
+                    checkpoint_dir=self.checkpoint_dir,
+                )
 
             pbar.update(1)
             if step % 1000 == 0:
                 pbar.set_description(f"Ep {episode_count} | eps {self.agent.epsilon:.2f}")
 
         pbar.close()
-        self._save_checkpoint(total_steps, final=True)
+        self._save_final_checkpoint(total_steps)
 
         return self.metrics
 
@@ -218,12 +225,50 @@ class Trainer:
             "death_rate": deaths / num_episodes,
         }
 
-    def _save_checkpoint(self, step: int, final: bool = False) -> str:
-        filename = "model_final.pt" if final else f"model_step_{step}.pt"
-        path = str(self.checkpoint_dir / filename)
-        self.agent.save(path)
+    def save_manual_checkpoint(self, step: int) -> str:
+        latest_path = self._write_latest_checkpoint()
+        manual_path = self.checkpoint_dir / f"model_manual_step_{step}.pt"
+        shutil.copy(latest_path, manual_path)
+        return str(manual_path)
 
-        latest_path = str(self.checkpoint_dir / "model_latest.pt")
-        shutil.copy(path, latest_path)
-        return path
+    def _save_periodic_checkpoint(self, step: int) -> str:
+        latest_path = self._write_latest_checkpoint()
+        saved_path = latest_path
 
+        if self._should_keep_periodic_checkpoint(step):
+            saved_path = self.checkpoint_dir / f"model_step_{step}.pt"
+            shutil.copy(latest_path, saved_path)
+
+        self._prune_old_checkpoints()
+        return str(saved_path)
+
+    def _save_final_checkpoint(self, step: int) -> str:
+        latest_path = self._write_latest_checkpoint()
+        final_path = self.checkpoint_dir / "model_final.pt"
+        shutil.copy(latest_path, final_path)
+        self._prune_old_checkpoints()
+        return str(final_path)
+
+    def _write_latest_checkpoint(self) -> Path:
+        latest_path = self.checkpoint_dir / "model_latest.pt"
+        self.agent.save(str(latest_path))
+        return latest_path
+
+    def _should_keep_periodic_checkpoint(self, step: int) -> bool:
+        stride = max(self.dqn_config.checkpoint_keep_stride, 1)
+        checkpoint_idx = step // self.dqn_config.checkpoint_freq
+        return stride == 1 or (checkpoint_idx - 1) % stride == 0
+
+    def _prune_old_checkpoints(self) -> None:
+        for path in self.checkpoint_dir.glob("model_step_*.pt"):
+            try:
+                step = int(path.stem.rsplit("_", maxsplit=1)[-1])
+            except ValueError:
+                continue
+
+            # Keep ad-hoc/manual checkpoints that are not on the periodic schedule.
+            if step % self.dqn_config.checkpoint_freq != 0:
+                continue
+
+            if not self._should_keep_periodic_checkpoint(step):
+                path.unlink(missing_ok=True)

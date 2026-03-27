@@ -152,6 +152,7 @@ class DQNConfig:
 
     # Checkpointing
     checkpoint_freq: int = 10_000
+    checkpoint_keep_stride: int = 10      # 10 keeps every 10th periodic checkpoint
     eval_freq: int = 5_000
     eval_episodes: int = 10
     
