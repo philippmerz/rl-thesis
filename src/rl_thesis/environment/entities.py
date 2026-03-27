@@ -22,19 +22,29 @@ class Direction(Enum):
     
     def to_delta(self) -> Tuple[int, int]:
         """Convert direction to (dx, dy) offset."""
-        deltas = {
-            Direction.NONE: (0, 0),
-            Direction.UP: (0, -1),
-            Direction.DOWN: (0, 1),
-            Direction.LEFT: (-1, 0),
-            Direction.RIGHT: (1, 0),
-        }
-        return deltas[self]
+        return _DIRECTION_DELTAS[self]
     
     @classmethod
     def from_action(cls, action: int) -> Direction:
         """Convert action index to direction by enum order (0=none, 1=up, 2=down, 3=left, 4=right)."""
-        return list(cls)[action]
+        return _DIRECTION_VALUES[action]
+
+
+_DIRECTION_VALUES = (
+    Direction.NONE,
+    Direction.UP,
+    Direction.DOWN,
+    Direction.LEFT,
+    Direction.RIGHT,
+)
+
+_DIRECTION_DELTAS = {
+    Direction.NONE: (0, 0),
+    Direction.UP: (0, -1),
+    Direction.DOWN: (0, 1),
+    Direction.LEFT: (-1, 0),
+    Direction.RIGHT: (1, 0),
+}
 
 
 @dataclass
@@ -187,7 +197,7 @@ class Enemy:
             direction = self._get_direction_toward(agent_position)
         else:
             # Random movement
-            direction = _rng.choice(list(Direction))
+            direction = _rng.choice(_DIRECTION_VALUES)
         
         new_pos = self.position.move(direction, width, height)
         new_tuple = new_pos.as_tuple()

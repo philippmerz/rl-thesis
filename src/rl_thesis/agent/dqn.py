@@ -168,8 +168,11 @@ class DQNAgent:
             return np.random.randint(self.action_size)
         
         # Greedy action from policy network
-        with torch.no_grad():
-            state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        with torch.inference_mode():
+            state_tensor = torch.from_numpy(state).unsqueeze(0).to(
+                self.device,
+                dtype=torch.float32,
+            )
             q_values = self.policy_net(state_tensor)
             return q_values.argmax(dim=1).item()
     
@@ -243,7 +246,7 @@ class DQNAgent:
 
     def _optimize(self, loss: torch.Tensor) -> None:
         """Backward pass with gradient clipping."""
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 1.0)
         self.optimizer.step()

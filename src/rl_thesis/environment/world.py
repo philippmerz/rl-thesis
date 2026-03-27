@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Tuple, Dict, Set, Optional
+from typing import TYPE_CHECKING, List, Tuple, Dict, Set
 import numpy as np
 
 if TYPE_CHECKING:
@@ -55,7 +55,6 @@ class World:
 
         # Instance-level RNGs — avoid mutating global state (B5 fix).
         self._rng = random.Random(self.seed)
-        self._np_rng = np.random.default_rng(self.seed)
         
         # Initialize entities
         self.agent: Agent = self._create_agent()
@@ -181,12 +180,11 @@ class World:
         
         return False
     
-    def reset(self, seed: int) -> WorldState:
+    def reset(self, seed: int) -> None:
         """Reset the world to initial state."""
         self.seed = seed
         
         self._rng = random.Random(self.seed)
-        self._np_rng = np.random.default_rng(self.seed)
         
         # Reset entities
         self.agent = self._create_agent()
@@ -206,10 +204,8 @@ class World:
         # Regenerate world
         self._generate_shelters()
         self._spawn_initial_entities()
-        
-        return self.get_state()
     
-    def step(self, action: int) -> Tuple[WorldState, float, bool, Dict]:
+    def step(self, action: int) -> Tuple[float, bool, Dict]:
         """
         Execute one simulation step.
         
@@ -217,7 +213,7 @@ class World:
             action: Movement action (0=none, 1=up, 2=down, 3=left, 4=right)
             
         Returns:
-            Tuple of (state, reward, done, info)
+            Tuple of (reward, done, info)
         """
         reward = 0.0
         info = {}
@@ -292,7 +288,7 @@ class World:
         if self.agent.hunger_ratio < 0.3:
             reward += self.config.reward_low_hunger
         
-        if self.agent.is_in_shelter and len(self._get_nearby_enemies(3)) > 0:
+        if self.agent.is_in_shelter and self._has_nearby_enemy(3):
             reward += self.config.reward_shelter_safety
 
         reward += self.config.reward_survival_tick
@@ -322,18 +318,15 @@ class World:
         info['hunger'] = self.agent.hunger
         info['episode_reward'] = self.episode_reward
         
-        return self.get_state(), reward, done, info
+        return reward, done, info
     
-    def _get_nearby_enemies(self, radius: int) -> List[Enemy]:
-        """Get enemies within radius of agent."""
-        nearby = []
+    def _has_nearby_enemy(self, radius: int) -> bool:
+        """Return whether any enemy is within radius of the agent."""
         agent_pos = self.agent.position
-        
         for enemy in self.enemies:
             if enemy.position.distance_to(agent_pos) <= radius:
-                nearby.append(enemy)
-        
-        return nearby
+                return True
+        return False
     
     def get_state(self) -> WorldState:
         """Get an immutable snapshot of the current world state."""
@@ -367,11 +360,12 @@ class World:
         """
         radius = self.config.observation_radius
         obs_size = 2 * radius + 1
-        
-        agent_x, agent_y = self.agent.position.as_tuple()
-        
         num_channels = self.config.num_spatial_channels
-        observation = np.zeros((num_channels, obs_size, obs_size), dtype=np.float32)
+        spatial_dim = num_channels * obs_size * obs_size
+
+        agent_x, agent_y = self.agent.position.as_tuple()
+        observation = np.zeros(spatial_dim + self.config.num_scalars, dtype=np.float32)
+        spatial = observation[:spatial_dim].reshape(num_channels, obs_size, obs_size)
         
         # Fill observation grid
         for dy in range(-radius, radius + 1):
@@ -391,27 +385,22 @@ class World:
                 
                 # Channel 0: Enemies (normalized by max expected)
                 if pos in self._enemy_positions:
-                    observation[0, obs_y, obs_x] = 1.0
+                    spatial[0, obs_y, obs_x] = 1.0
                 
                 # Channel 1: Food
                 if pos in self._food_positions:
-                    observation[1, obs_y, obs_x] = 1.0
+                    spatial[1, obs_y, obs_x] = 1.0
                 
                 # Channel 2: Shelters
                 if pos in self._shelter_positions:
-                    observation[2, obs_y, obs_x] = 1.0
-        
-        # Flatten the spatial observation
-        flat_obs = observation.flatten()
-        
-        # Agent stats
-        agent_stats = np.array([
+                    spatial[2, obs_y, obs_x] = 1.0
+
+        observation[spatial_dim:] = (
             self.agent.health / self.agent.max_health,
             self.agent.hunger / self.agent.max_hunger,
             1.0 if self.agent.is_in_shelter else 0.0,
-        ], dtype=np.float32)
-        
-        return np.concatenate([flat_obs, agent_stats])
+        )
+        return observation
     
     @property
     def observation_size(self) -> int:

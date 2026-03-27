@@ -97,7 +97,7 @@ class SurvivalEnv:
         action = max(0, min(self.action_size - 1, action))
         
         # Step the world
-        _, reward, terminated, info = self._world.step(action)
+        reward, terminated, info = self._world.step(action)
         
         self._current_step += 1
         
@@ -133,5 +133,4 @@ class SurvivalEnv:
             'episode_reward': self._world.episode_reward,
             'terminated_by_death': not agent.is_alive,
         }
-
 
