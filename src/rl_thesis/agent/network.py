@@ -3,17 +3,17 @@ CNN encoder with Dueling DQN head.
 """
 from __future__ import annotations
 
-from typing import Tuple, List
+from typing import Tuple
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 def _init_weights(module: nn.Module) -> None:
     """Xavier-uniform init for Linear layers, Kaiming for Conv2d."""
     if isinstance(module, nn.Linear):
         nn.init.xavier_uniform_(module.weight)
-        nn.init.constant_(module.bias, 0.0)
+        if module.bias is not None:
+            nn.init.constant_(module.bias, 0.0)
     elif isinstance(module, nn.Conv2d):
         nn.init.kaiming_uniform_(module.weight, nonlinearity="relu")
         if module.bias is not None:
@@ -45,8 +45,10 @@ class CNNEncoder(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(spatial_channels, c1, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.LayerNorm([c1, grid_h, grid_w]),
             nn.Conv2d(c1, c2, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.LayerNorm([c2, grid_h, grid_w]),
             nn.Conv2d(c2, c3, kernel_size=3, stride=2, padding=0),
             nn.ReLU(),
         )
@@ -91,6 +93,9 @@ class DuelingHead(nn.Module):
             nn.Linear(feature_size, hidden), nn.ReLU(), nn.Linear(hidden, action_size),
         )
         self.apply(_init_weights)
+        # Scale output layers so initial Q-values start near zero
+        nn.init.orthogonal_(self.value_stream[-1].weight, gain=0.01)
+        nn.init.orthogonal_(self.advantage_stream[-1].weight, gain=0.01)
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         value = self.value_stream(features)          # (B, 1)
