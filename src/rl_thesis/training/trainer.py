@@ -49,6 +49,7 @@ class Trainer:
 
         self.on_episode_end: Optional[Callable[[int, Dict], None]] = None
         self.on_checkpoint: Optional[Callable[[int, str], None]] = None
+        self._latest_checkpoint_step = self._discover_latest_checkpoint_step()
 
     def train(
         self,
@@ -226,33 +227,39 @@ class Trainer:
         }
 
     def save_manual_checkpoint(self, step: int) -> str:
-        latest_path = self._write_latest_checkpoint()
         manual_path = self.checkpoint_dir / f"model_manual_step_{step}.pt"
-        shutil.copy(latest_path, manual_path)
+        self.agent.save(str(manual_path))
+        self._refresh_latest_checkpoint(
+            source_path=manual_path,
+            progress_step=max(step, self.agent.steps_done),
+        )
         return str(manual_path)
 
     def _save_periodic_checkpoint(self, step: int) -> str:
-        latest_path = self._write_latest_checkpoint()
-        saved_path = latest_path
-
+        progress_step = max(step, self.agent.steps_done)
         if self._should_keep_periodic_checkpoint(step):
             saved_path = self.checkpoint_dir / f"model_step_{step}.pt"
-            shutil.copy(latest_path, saved_path)
+            self.agent.save(str(saved_path))
+            self._refresh_latest_checkpoint(saved_path, progress_step)
+        elif progress_step >= self._latest_checkpoint_step:
+            saved_path = self.checkpoint_dir / "model_latest.pt"
+            self.agent.save(str(saved_path))
+            self._latest_checkpoint_step = progress_step
+        else:
+            saved_path = self.checkpoint_dir / "model_latest.pt"
 
         self._prune_old_checkpoints()
         return str(saved_path)
 
     def _save_final_checkpoint(self, step: int) -> str:
-        latest_path = self._write_latest_checkpoint()
         final_path = self.checkpoint_dir / "model_final.pt"
-        shutil.copy(latest_path, final_path)
+        self.agent.save(str(final_path))
+        self._refresh_latest_checkpoint(
+            source_path=final_path,
+            progress_step=max(step, self.agent.steps_done),
+        )
         self._prune_old_checkpoints()
         return str(final_path)
-
-    def _write_latest_checkpoint(self) -> Path:
-        latest_path = self.checkpoint_dir / "model_latest.pt"
-        self.agent.save(str(latest_path))
-        return latest_path
 
     def _should_keep_periodic_checkpoint(self, step: int) -> bool:
         stride = max(self.dqn_config.checkpoint_keep_stride, 1)
@@ -272,3 +279,47 @@ class Trainer:
 
             if not self._should_keep_periodic_checkpoint(step):
                 path.unlink(missing_ok=True)
+
+    def _refresh_latest_checkpoint(self, source_path: Path, progress_step: int) -> None:
+        if progress_step < self._latest_checkpoint_step:
+            return
+
+        latest_path = self.checkpoint_dir / "model_latest.pt"
+        if source_path != latest_path:
+            shutil.copy(source_path, latest_path)
+        self._latest_checkpoint_step = progress_step
+
+    def _discover_latest_checkpoint_step(self) -> int:
+        latest_step = -1
+
+        for path in self.checkpoint_dir.glob("model_*.pt"):
+            parsed_step = self._parse_checkpoint_step_from_name(path)
+            if parsed_step is not None:
+                latest_step = max(latest_step, parsed_step)
+
+        for name in ("model_latest.pt", "model_final.pt"):
+            checkpoint_path = self.checkpoint_dir / name
+            if not checkpoint_path.exists():
+                continue
+
+            try:
+                import torch
+
+                checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+                latest_step = max(latest_step, int(checkpoint.get("steps_done", -1)))
+            except Exception:
+                continue
+
+        return latest_step
+
+    @staticmethod
+    def _parse_checkpoint_step_from_name(path: Path) -> Optional[int]:
+        stem = path.stem
+        for prefix in ("model_step_", "model_manual_step_"):
+            if stem.startswith(prefix):
+                suffix = stem[len(prefix):]
+                try:
+                    return int(suffix)
+                except ValueError:
+                    return None
+        return None
