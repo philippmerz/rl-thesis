@@ -3,6 +3,11 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import resource
+import shutil
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Dict, Any
@@ -31,6 +36,16 @@ _EPISODE_FIELDS = [
     "terminated",
 ]
 
+_SYSTEM_FIELDS = [
+    "step",
+    "episode",
+    "rss_mb",
+    "max_rss_mb",
+    "free_disk_gb",
+    "checkpoint_count",
+    "wall_time",
+]
+
 
 class MetricsLogger:
     """Append-only CSV logger for eval and episode metrics."""
@@ -41,6 +56,7 @@ class MetricsLogger:
 
         self._eval_path = log_dir / "eval.csv"
         self._episode_path = log_dir / "episodes.csv"
+        self._system_path = log_dir / "system.csv"
         self._start_time = time.monotonic()
 
         # Count existing rows before opening (for resume support).
@@ -48,6 +64,7 @@ class MetricsLogger:
 
         self._eval_writer = self._open_csv(self._eval_path, _EVAL_FIELDS)
         self._episode_writer = self._open_csv(self._episode_path, _EPISODE_FIELDS)
+        self._system_writer = self._open_csv(self._system_path, _SYSTEM_FIELDS)
 
         self._best_eval_reward = float("-inf")
         self._best_survival = 0
@@ -112,6 +129,21 @@ class MetricsLogger:
         if self._episode_count % 50 == 0:
             self._flush_episodes()
 
+    def log_system(self, step: int, episode: int, checkpoint_dir: Path) -> None:
+        checkpoint_count = sum(1 for _ in checkpoint_dir.glob("model_step_*.pt"))
+        free_disk_gb = shutil.disk_usage(self.log_dir).free / (1024 ** 3)
+        row = {
+            "step": step,
+            "episode": episode,
+            "rss_mb": f"{_get_rss_bytes() / (1024 ** 2):.1f}",
+            "max_rss_mb": f"{_get_max_rss_bytes() / (1024 ** 2):.1f}",
+            "free_disk_gb": f"{free_disk_gb:.2f}",
+            "checkpoint_count": checkpoint_count,
+            "wall_time": f"{time.monotonic() - self._start_time:.0f}",
+        }
+        self._system_writer.writerow(row)
+        self._flush_system()
+
     def save_run_config(self, config_name: str, seed: int,
                         world_config: Any, dqn_config: Any) -> None:
         """Dump full config to JSON for reproducibility."""
@@ -146,6 +178,29 @@ class MetricsLogger:
 
     def _flush_episodes(self) -> None:
         self._handles[1].flush()
+
+    def _flush_system(self) -> None:
+        self._handles[2].flush()
+
+
+def _get_rss_bytes() -> int:
+    """Return current RSS in bytes, falling back to peak RSS if needed."""
+    try:
+        output = subprocess.check_output(
+            ["ps", "-o", "rss=", "-p", str(os.getpid())],
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError, PermissionError):
+        return _get_max_rss_bytes()
+    return int(output.strip()) * 1024
+
+
+def _get_max_rss_bytes() -> int:
+    """Return peak RSS in bytes, normalizing platform-specific units."""
+    max_rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    if sys.platform == "darwin":
+        return max_rss
+    return max_rss * 1024
 
 
 def _serialize(v: Any) -> Any:
