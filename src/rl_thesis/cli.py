@@ -1,4 +1,4 @@
-from typing import List, Optional
+from pathlib import Path
 
 import typer
 
@@ -9,7 +9,11 @@ from rl_thesis.config.config import (
     DQNConfig,
 )
 
-app = typer.Typer(name="rl_thesis", help="Survival RL Thesis Codebase")
+app = typer.Typer(
+    name="rl_thesis",
+    help="Survival RL Thesis Codebase",
+    pretty_exceptions_enable=False,
+)
 
 
 @app.command()
@@ -51,7 +55,7 @@ def train(
 @app.command(name="train-grid")
 def train_grid(
     seeds: int = typer.Option(3, "--seeds", "-n", help="Number of seeds (42, 43, ...)"),
-    configs: Optional[List[str]] = typer.Option(
+    configs: list[str] | None = typer.Option(
         None, "--config", "-c",
         help="Specific configs to run (repeatable). Omit for all.",
     ),
@@ -61,6 +65,61 @@ def train_grid(
 
     seed_list = list(range(42, 42 + seeds))
     run_grid(seeds=seed_list, dqn_config=DQNConfig(), configs=configs or None)
+
+
+@app.command(name="reward-sweep")
+def reward_sweep(
+    steps: int | None = typer.Option(
+        None,
+        "--steps",
+        help="Training timesteps per run. Defaults to DQNConfig.total_timesteps.",
+    ),
+    seeds: int = typer.Option(
+        3,
+        "--seeds",
+        "-n",
+        help="Number of seeds starting at --start-seed.",
+    ),
+    start_seed: int = typer.Option(42, "--start-seed", help="First seed value."),
+    configs: list[str] | None = typer.Option(
+        None,
+        "--config",
+        "-c",
+        help="Specific configs to run (repeatable). Omit for all reward configs.",
+    ),
+    workers: int | None = typer.Option(
+        None,
+        "--workers",
+        "-w",
+        min=1,
+        help="Total concurrent training workers. Defaults to 2x visible GPU slots or 1.",
+    ),
+    gpu_slots: int | None = typer.Option(
+        None,
+        "--gpu-slots",
+        min=0,
+        help="Visible GPU slots to schedule against. Defaults to autodetected visible GPUs.",
+    ),
+    log_dir: Path = typer.Option(
+        Path("runs") / "_sweep",
+        "--log-dir",
+        help="Directory for sweep coordinator and worker logs.",
+    ),
+):
+    """Run the reward sweep with a local task queue."""
+    from rl_thesis.training.reward_sweep import run_reward_sweep
+
+    exit_code = run_reward_sweep(
+        steps=steps,
+        seeds=seeds,
+        start_seed=start_seed,
+        configs=configs,
+        workers=workers,
+        gpu_slots=gpu_slots,
+        log_dir=log_dir,
+    )
+    if exit_code != 0:
+        raise typer.Exit(code=exit_code)
 
 
 @app.command(name="list-configs")

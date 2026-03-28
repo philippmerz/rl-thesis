@@ -4,6 +4,7 @@ Main training loop: episode collection, evaluation, checkpointing, metrics loggi
 from __future__ import annotations
 
 import shutil
+import sys
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Callable, Dict, Any
@@ -50,6 +51,7 @@ class Trainer:
         self.on_episode_end: Optional[Callable[[int, Dict], None]] = None
         self.on_checkpoint: Optional[Callable[[int, str], None]] = None
         self._latest_checkpoint_step = self._discover_latest_checkpoint_step()
+        self._show_progress = sys.stdout.isatty()
 
     def train(
         self,
@@ -77,7 +79,7 @@ class Trainer:
             label = "policy" if resuming else "random"
             print(f"Warming up replay buffer with {warmup_steps} {label} actions...")
 
-            with tqdm(total=warmup_steps, desc="Warmup") as pbar:
+            with tqdm(total=warmup_steps, desc="Warmup", disable=not self._show_progress) as pbar:
                 w_state, _ = self.env.reset()
                 for _ in range(warmup_steps):
                     if resuming:
@@ -98,7 +100,12 @@ class Trainer:
 
         self.agent.discard_pending()
         state, _ = self.env.reset()
-        pbar = tqdm(total=total_steps, initial=start_step, desc="Training")
+        pbar = tqdm(
+            total=total_steps,
+            initial=start_step,
+            desc="Training",
+            disable=not self._show_progress,
+        )
 
         for step in range(start_step, total_steps):
             global_step = step
