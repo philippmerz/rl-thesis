@@ -271,7 +271,7 @@ class World:
         if total_damage > 0:
             protection = self.config.shelter_protection if self.agent.is_in_shelter else 0.0
             self.agent.take_damage(total_damage, protection)
-            reward += self.config.reward_damage_taken * (total_damage * (1 - protection))
+            reward += self.config.reward_enemy_damage_taken * (total_damage * (1 - protection))
             info['damage_taken'] = total_damage * (1 - protection)
         
         # 5. Deplete hunger
@@ -280,7 +280,7 @@ class World:
         # 6. Handle starvation or regeneration
         if self.agent.is_starving:
             self.agent.take_damage(self.config.starvation_damage)
-            reward += self.config.reward_damage_taken * self.config.starvation_damage
+            reward += self.config.reward_starvation_damage * self.config.starvation_damage
         elif self.agent.hunger_ratio > 0.3:
             self.agent.regenerate(self.config.health_regen_rate)
         

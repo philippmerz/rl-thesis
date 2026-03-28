@@ -84,12 +84,13 @@ class WorldConfig:
         return self.num_spatial_channels * g * g + self.num_scalars
 
     # Reward shaping
-    reward_food_eaten: float = 15.0       # Higher food reward to encourage eating
-    reward_survival_tick: float = 0.0     # DISABLED - was drowning out food signal
-    reward_death: float = -50.0           # Less harsh death penalty
-    reward_damage_taken: float = -2.0     # Higher damage penalty to encourage avoidance
-    reward_low_hunger: float = 0.0       # Stronger hunger warning to encourage eating
-    reward_shelter_safety: float = 0.1    # More reward for using shelters
+    reward_food_eaten: float = 15.0    
+    reward_survival_tick: float = 0.1
+    reward_death: float = -150.0 
+    reward_enemy_damage_taken: float = -1.0
+    reward_starvation_damage: float = -0.1
+    reward_low_hunger: float = 0.0
+    reward_shelter_safety: float = 0.1
 
 @dataclass
 class HumanHeuristicConfig:
