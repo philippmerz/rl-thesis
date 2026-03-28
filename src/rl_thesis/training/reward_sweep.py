@@ -9,7 +9,7 @@ import time
 import traceback
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 from rl_thesis.config.reward_configs import get_config_names
 
@@ -64,7 +64,7 @@ def run_reward_sweep(
     print(f"Plan written to {plan_path}")
 
     ctx = mp.get_context("spawn")
-    task_queue = ctx.Queue()
+    task_queue = ctx.SimpleQueue()
     for task in tasks:
         task_queue.put(task)
     for _ in range(worker_count):
@@ -111,6 +111,7 @@ def run_reward_sweep(
     finally:
         for process in processes:
             process.join(timeout=5)
+        _close_queue(task_queue)
 
     return exit_code
 
@@ -179,7 +180,7 @@ def _write_plan(
 def _start_workers(
     ctx: mp.context.BaseContext,
     worker_count: int,
-    task_queue: mp.Queue,
+    task_queue: Any,
     log_dir: Path,
     visible_gpu_ids: Sequence[str],
     steps: int,
@@ -199,7 +200,7 @@ def _start_workers(
 
 def _worker_loop(
     worker_index: int,
-    task_queue: mp.Queue,
+    task_queue: Any,
     log_dir: Path,
     visible_gpu_ids: Sequence[str],
     steps: int,
@@ -258,6 +259,8 @@ def _worker_loop(
             except KeyboardInterrupt:
                 print(f"Worker {worker_index} interrupted.", flush=True)
                 raise SystemExit(130)
+            finally:
+                _close_queue(task_queue, join_thread=False)
 
 
 def _terminate_processes(processes: Sequence[mp.Process]) -> None:
@@ -290,3 +293,18 @@ def _terminate_processes(processes: Sequence[mp.Process]) -> None:
         if process.is_alive():
             process.kill()
             process.join()
+
+
+def _close_queue(task_queue: Any, join_thread: bool = True) -> None:
+    close = getattr(task_queue, "close", None)
+    if close is not None:
+        close()
+
+    if join_thread:
+        join = getattr(task_queue, "join_thread", None)
+        if join is not None:
+            join()
+    else:
+        cancel = getattr(task_queue, "cancel_join_thread", None)
+        if cancel is not None:
+            cancel()

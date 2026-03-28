@@ -228,6 +228,7 @@ class DQNAgent:
         Returns:
             (current_q, target_q) — both shape (batch,).
         """
+        # should never be reached, but just to be sure
         returns = torch.clamp(returns, -100.0, 100.0)
 
         current_q = self.policy_net(states).gather(
@@ -283,8 +284,9 @@ class DQNAgent:
     def _soft_update_target(self) -> None:
         """Polyak-average target network toward policy network."""
         tau = self.config.tau
-        for tp, pp in zip(self.target_net.parameters(), self.policy_net.parameters()):
-            tp.data.mul_(1.0 - tau).add_(pp.data, alpha=tau)
+        with torch.no_grad():
+            for tp, pp in zip(self.target_net.parameters(), self.policy_net.parameters()):
+                tp.lerp_(pp, tau)
 
     def save(self, path: str, max_retries: int = 3) -> None:
         """

@@ -122,18 +122,5 @@ def reward_sweep(
         raise typer.Exit(code=exit_code)
 
 
-@app.command(name="list-configs")
-def list_configs():
-    """Show all available reward configurations and their weights."""
-    from rl_thesis.config.reward_configs import get_config_names, describe_config
-
-    for name in get_config_names():
-        weights = describe_config(name)
-        print(f"\n{name}:")
-        for k, v in weights.items():
-            label = k.replace("reward_", "")
-            print(f"  {label:20s} {v:+.1f}")
-
-
 if __name__ == "__main__":
     app()
