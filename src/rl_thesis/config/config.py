@@ -88,7 +88,7 @@ class WorldConfig:
     reward_survival_tick: float = 0.0     # DISABLED - was drowning out food signal
     reward_death: float = -50.0           # Less harsh death penalty
     reward_damage_taken: float = -2.0     # Higher damage penalty to encourage avoidance
-    reward_low_hunger: float = -0.5       # Stronger hunger warning to encourage eating
+    reward_low_hunger: float = 0.0       # Stronger hunger warning to encourage eating
     reward_shelter_safety: float = 0.1    # More reward for using shelters
 
 @dataclass
