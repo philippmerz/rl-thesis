@@ -2,6 +2,80 @@
 
 Each config is a dict of WorldConfig field overrides.
 Only reward-related fields are changed; world mechanics stay constant.
+
+Reward Feasibility Constraints
+==============================
+
+Environment constants (from WorldConfig defaults):
+    u_max = 100       max hunger
+    h_max = 100       max health
+    c     = 0.5       movement hunger cost
+    u_dot = 0.2       hunger depletion per tick
+    h_s   = 0.5       starvation damage per tick
+    d_e   = 15        enemy damage per hit
+    f     = 20        food nutrition value
+    D     = 14        max visible distance (2 * obs_radius)
+
+Derived:
+    T_starve_still = u_max / u_dot                  = 500 ticks
+    T_starve_move  = u_max / (u_dot + c)            ~ 143 ticks
+    T_death        = h_max / h_s                     = 200 ticks
+    T_passive      = T_starve_still + T_death        = 700 ticks
+
+Notation: |w| denotes absolute value of a (negative) weight.
+
+C1  Anti-stasis: one step toward food must yield more proximity
+    reward than the hunger penalty from the movement cost.
+
+        w_prox > |w_hprop| * c * (D + 1) / u_max
+
+    forage:  0.1  > 0.3 * 0.5 * 15 / 100 = 0.0225  OK
+
+C2  Anti-hovering: max proximity reward (at distance 0) must not
+    exceed the average hunger penalty per tick.
+
+        w_prox < |w_hprop| / 2
+
+    forage:  0.1  < 0.3 / 2 = 0.15  OK
+
+C3  Anti-passivity: the total tick reward over a passive episode
+    must not exceed the accumulated penalties.
+
+        w_tick < (|w_hprop| * Sigma_h + |w_sdm| * h_s * T_death + |w_death|)
+                 / T_passive
+
+    where Sigma_h ~ 449.5 for stationary depletion over 700 ticks.
+
+    forage:  0.0  < (0.3 * 449.5 + 1.0 * 100 + 10) / 700 = 0.35  OK
+
+C4  Enemy flee: the damage penalty from one hit must exceed the
+    hunger penalty from one evasive step.
+
+        |w_edm| * d_e > |w_hprop| * c / u_max
+
+    forage:  0.1 * 15 = 1.5 > 0.3 * 0.5 / 100 = 0.0015  OK
+
+C5  Starvation escalation: per-tick penalty when starving must
+    exceed the max hunger-proportional penalty, creating urgency.
+
+        |w_sdm| * h_s > |w_hprop|
+
+    forage:  1.0 * 0.5 = 0.5 > 0.3  OK
+
+C6  Terminal signal: the death penalty must be the worst single
+    event, exceeding the best single event (eating).
+
+        |w_death| > w_food
+
+    forage:  10 > 5  OK
+
+C7  Food trip: reaching food at expected distance d_bar must be
+    worth the movement cost. Always satisfied when C1 holds and
+    food restores more hunger than the trip costs:
+
+        f > d_bar * c
+
+    With ~36 food on 64x64, d_bar ~ 5:  20 > 5 * 0.5 = 2.5  OK
 """
 from __future__ import annotations
 
@@ -12,81 +86,16 @@ from rl_thesis.config.config import WorldConfig
 
 
 REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
-    # Reference configuration: current hand-tuned defaults.
+    # Feasible baseline: all constraints C1-C7 satisfied.
     "baseline": {},
 
-    # Pure survival signal: constant tick reward + terminal death penalty.
-    # The agent receives no information about food, damage, or shelters.
-    # It must discover that eating prevents starvation purely from the
-    # tick reward disappearing on death.
-    "survival_only": {
-        "reward_food_eaten": 0.0,
-        "reward_survival_tick": 1.0,
-        "reward_death": -100.0,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_starvation_damage": 0.0,
-        "reward_low_hunger": 0.0,
-        "reward_shelter_safety": 0.0,
-    },
-
-    # Aggressive foraging: large food bonus, weak penalties.
-    # Expected behavior: risk-taking food collection, high damage taken.
-    "foraging": {
-        "reward_food_eaten": 30.0,
-        "reward_survival_tick": 0.0,
-        "reward_death": -20.0,
-        "reward_enemy_damage_taken": -1.0,
-        "reward_starvation_damage": -1.0,
-        "reward_low_hunger": -1.0,
-        "reward_shelter_safety": 0.0,
-    },
-
-    # Risk-averse: heavy penalties for damage and death.
-    # Expected behavior: shelter-seeking, cautious movement.
-    "cautious": {
-        "reward_food_eaten": 10.0,
-        "reward_survival_tick": 0.0,
-        "reward_death": -100.0,
-        "reward_enemy_damage_taken": -5.0,
-        "reward_starvation_damage": -5.0,
-        "reward_low_hunger": -0.5,
-        "reward_shelter_safety": 1.0,
-    },
-
-    # Shelter camping: strong shelter incentive + tick reward.
-    # Expected behavior: stay in shelter, minimal foraging.
-    "shelter": {
-        "reward_food_eaten": 5.0,
-        "reward_survival_tick": 0.5,
-        "reward_death": -50.0,
-        "reward_enemy_damage_taken": -3.0,
-        "reward_starvation_damage": -3.0,
-        "reward_low_hunger": -0.3,
-        "reward_shelter_safety": 3.0,
-    },
-
-    # All signals active at moderate weights.
-    # Expected behavior: mixed strategy.
-    "balanced": {
-        "reward_food_eaten": 10.0,
-        "reward_survival_tick": 0.2,
-        "reward_death": -50.0,
-        "reward_enemy_damage_taken": -2.0,
-        "reward_starvation_damage": -2.0,
-        "reward_low_hunger": -0.5,
-        "reward_shelter_safety": 0.5,
-    },
-
-    # Minimal shaping: only food and death.
-    # No intermediate feedback about damage, hunger, or shelters.
-    "sparse": {
-        "reward_food_eaten": 15.0,
-        "reward_survival_tick": 0.0,
-        "reward_death": -50.0,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_starvation_damage": 0.0,
-        "reward_low_hunger": 0.0,
-        "reward_shelter_safety": 0.0,
+    # Deliberate C1 violation (anti-stasis). Proximity below the
+    # movement break-even threshold: w_prox=0.02 < 0.0225.
+    # Predicted failure: agent learns to stay still because moving
+    # toward food costs more in hunger penalty than it gains in
+    # proximity reward.
+    "weak_proximity": {
+        "reward_food_visible_proximity": 0.02,
     },
 }
 
@@ -119,3 +128,89 @@ def describe_config(config_name: str) -> Dict[str, Any]:
         "reward_food_visible_proximity": wc.reward_food_visible_proximity,
         "reward_shelter_safety": wc.reward_shelter_safety,
     }
+
+
+def validate_config(config_name: str) -> list[str]:
+    """Check reward feasibility constraints C1-C7. Returns list of violations."""
+    wc = make_world_config(config_name)
+
+    w_food = wc.reward_food_eaten
+    w_tick = wc.reward_survival_tick
+    w_death = abs(wc.reward_death)
+    w_edm = abs(wc.reward_enemy_damage_taken)
+    w_sdm = abs(wc.reward_starvation_damage)
+    w_hprop = abs(wc.reward_hunger_proportional)
+    w_prox = wc.reward_food_visible_proximity
+
+    c = wc.movement_cost
+    u_max = wc.max_hunger
+    h_max = wc.max_health
+    h_s = wc.starvation_damage
+    d_e = wc.enemy_damage
+    f = wc.food_value
+    D = 2 * wc.observation_radius
+
+    T_starve = u_max / wc.hunger_depletion_rate
+    T_death = h_max / h_s
+    T_passive = T_starve + T_death
+
+    # Sigma_h: cumulative (1 - ratio) over a passive episode.
+    u_dot = wc.hunger_depletion_rate
+    sigma_h = sum(
+        min(1.0, u_dot * t / u_max)
+        for t in range(int(T_passive))
+    )
+
+    violations = []
+
+    # C1: anti-stasis
+    if w_hprop > 0:
+        c1_bound = w_hprop * c * (D + 1) / u_max
+        if w_prox <= c1_bound:
+            violations.append(
+                f"C1 anti-stasis: w_prox={w_prox} <= {c1_bound:.4f}"
+            )
+
+    # C2: anti-hovering
+    if w_hprop > 0:
+        c2_bound = w_hprop / 2
+        if w_prox >= c2_bound:
+            violations.append(
+                f"C2 anti-hovering: w_prox={w_prox} >= {c2_bound:.4f}"
+            )
+
+    # C3: anti-passivity
+    c3_bound = (w_hprop * sigma_h + w_sdm * h_s * T_death + w_death) / T_passive
+    if w_tick >= c3_bound:
+        violations.append(
+            f"C3 anti-passivity: w_tick={w_tick} >= {c3_bound:.4f}"
+        )
+
+    # C4: enemy flee
+    if w_hprop > 0:
+        c4_bound = w_hprop * c / (u_max * d_e)
+        if w_edm <= c4_bound:
+            violations.append(
+                f"C4 enemy flee: |w_edm|={w_edm} <= {c4_bound:.6f}"
+            )
+
+    # C5: starvation escalation
+    if w_hprop > 0 and w_sdm * h_s <= w_hprop:
+        violations.append(
+            f"C5 starvation escalation: |w_sdm|*h_s={w_sdm * h_s} <= |w_hprop|={w_hprop}"
+        )
+
+    # C6: terminal signal
+    if w_death <= w_food:
+        violations.append(
+            f"C6 terminal signal: |w_death|={w_death} <= w_food={w_food}"
+        )
+
+    # C7: food trip
+    d_bar = 5  # approximate expected distance to nearest food
+    if f <= d_bar * c:
+        violations.append(
+            f"C7 food trip: f={f} <= d_bar*c={d_bar * c}"
+        )
+
+    return violations
