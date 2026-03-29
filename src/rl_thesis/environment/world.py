@@ -70,6 +70,7 @@ class World:
         # World state
         self.ticks = 0
         self.episode_reward = 0.0
+        self._prev_move_features = np.zeros(4, dtype=np.float32)
         
         # Generate static elements
         self._generate_shelters()
@@ -200,6 +201,7 @@ class World:
         # Reset state
         self.ticks = 0
         self.episode_reward = 0.0
+        self._prev_move_features = np.zeros(4, dtype=np.float32)
         
         # Regenerate world
         self._generate_shelters()
@@ -227,6 +229,7 @@ class World:
         # Apply movement cost
         if old_position != new_position:
             self.agent.deplete_hunger(self.config.movement_cost)
+        self._prev_move_features = self._encode_move_features(old_position, new_position)
         
         # 2. Check if agent is in shelter
         self.agent.is_in_shelter = new_position in self._shelter_positions
@@ -287,6 +290,15 @@ class World:
         # 7. Reward shaping
         if self.agent.hunger_ratio < 0.3:
             reward += self.config.reward_low_hunger
+
+        reward += self.config.reward_hunger_proportional * (1.0 - self.agent.hunger_ratio)
+
+        if self.config.reward_food_visible_proximity != 0.0:
+            nearest_food_distance = self._nearest_visible_food_distance()
+            if nearest_food_distance is not None:
+                max_visible_distance = 2 * self.config.observation_radius
+                closeness = (max_visible_distance - nearest_food_distance + 1) / (max_visible_distance + 1)
+                reward += self.config.reward_food_visible_proximity * closeness
         
         if self.agent.is_in_shelter and self._has_nearby_enemy(3):
             reward += self.config.reward_shelter_safety
@@ -327,6 +339,22 @@ class World:
             if enemy.position.distance_to(agent_pos) <= radius:
                 return True
         return False
+
+    def _nearest_visible_food_distance(self) -> int | None:
+        """Return the Manhattan distance to the nearest visible food tile."""
+        agent_x, agent_y = self.agent.position.as_tuple()
+        radius = self.config.observation_radius
+        nearest_distance = None
+
+        for food_x, food_y in self._food_positions:
+            if abs(food_x - agent_x) > radius or abs(food_y - agent_y) > radius:
+                continue
+
+            distance = abs(food_x - agent_x) + abs(food_y - agent_y)
+            if nearest_distance is None or distance < nearest_distance:
+                nearest_distance = distance
+
+        return nearest_distance
     
     def get_state(self) -> WorldState:
         """Get an immutable snapshot of the current world state."""
@@ -353,7 +381,7 @@ class World:
         - Channel 1: Food presence (binary)
         - Channel 2: Shelter presence (binary)
         
-        Plus agent stats.
+        Plus agent stats and previous movement direction.
         
         Returns:
             Flattened observation array
@@ -399,8 +427,29 @@ class World:
             self.agent.health / self.agent.max_health,
             self.agent.hunger / self.agent.max_hunger,
             1.0 if self.agent.is_in_shelter else 0.0,
+            *self._prev_move_features,
         )
         return observation
+
+    @staticmethod
+    def _encode_move_features(
+        old_position: Tuple[int, int],
+        new_position: Tuple[int, int],
+    ) -> np.ndarray:
+        features = np.zeros(4, dtype=np.float32)
+        dx = new_position[0] - old_position[0]
+        dy = new_position[1] - old_position[1]
+
+        if dy < 0:
+            features[0] = 1.0
+        elif dy > 0:
+            features[1] = 1.0
+        elif dx < 0:
+            features[2] = 1.0
+        elif dx > 0:
+            features[3] = 1.0
+
+        return features
     
     @property
     def observation_size(self) -> int:

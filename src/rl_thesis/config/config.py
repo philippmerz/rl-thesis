@@ -65,7 +65,7 @@ class WorldConfig:
     # Observation settings
     observation_radius: int = 7           # Agent's vision radius
     num_spatial_channels: int = 3         # enemy, food, shelter channels
-    num_agent_stats: int = 3              # health, hunger, in_shelter
+    num_agent_stats: int = 7              # health, hunger, in_shelter, prev_move_{up,down,left,right}
 
     @property
     def observation_grid_size(self) -> int:
@@ -84,12 +84,14 @@ class WorldConfig:
         return self.num_spatial_channels * g * g + self.num_scalars
 
     # Reward shaping
-    reward_food_eaten: float = 15.0    
+    reward_food_eaten: float = 50.0    
     reward_survival_tick: float = 0.1
     reward_death: float = -150.0 
-    reward_enemy_damage_taken: float = -1.0
-    reward_starvation_damage: float = -0.1
+    reward_enemy_damage_taken: float = -0.0
+    reward_starvation_damage: float = -0.0
     reward_low_hunger: float = 0.0
+    reward_hunger_proportional: float = 0.0
+    reward_food_visible_proximity: float = 0.0
     reward_shelter_safety: float = 0.1
 
 @dataclass

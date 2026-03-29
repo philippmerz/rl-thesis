@@ -115,5 +115,7 @@ def describe_config(config_name: str) -> Dict[str, Any]:
         "reward_enemy_damage_taken": wc.reward_enemy_damage_taken,
         "reward_starvation_damage": wc.reward_starvation_damage,
         "reward_low_hunger": wc.reward_low_hunger,
+        "reward_hunger_proportional": wc.reward_hunger_proportional,
+        "reward_food_visible_proximity": wc.reward_food_visible_proximity,
         "reward_shelter_safety": wc.reward_shelter_safety,
     }
