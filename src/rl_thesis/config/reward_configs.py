@@ -97,6 +97,35 @@ REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
     "weak_proximity": {
         "reward_food_visible_proximity": 0.02,
     },
+
+    # Diagnostic: baseline rewards with zero movement cost.
+    # If the agent still oscillates, oscillation is a training
+    # artifact, not a reward-rational strategy.
+    "free_movement": {
+        "movement_cost": 0.0,
+    },
+
+    # C6 violation (terminal signal). No death penalty.
+    # Tests whether per-step consequences alone (hunger, damage,
+    # starvation) are sufficient to learn survival, or whether
+    # the terminal signal is necessary for TD bootstrapping to
+    # propagate long-horizon danger.
+    "no_death": {
+        "reward_death": 0.0,
+    },
+
+    # Death-only: the sole reward signal is the terminal death
+    # penalty. All per-step shaping removed. Tests whether a
+    # single sparse signal can drive learning over a 1000-step
+    # horizon, or whether the credit assignment gap is too wide.
+    "death_only": {
+        "reward_food_eaten": 0.0,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_food_visible_proximity": 0.0,
+        "reward_shelter_safety": 0.0,
+    },
 }
 
 
