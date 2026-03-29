@@ -70,8 +70,7 @@ class World:
         # World state
         self.ticks = 0
         self.episode_reward = 0.0
-        self._prev_move_features = np.zeros(4, dtype=np.float32)
-        
+
         # Generate static elements
         self._generate_shelters()
         
@@ -201,7 +200,6 @@ class World:
         # Reset state
         self.ticks = 0
         self.episode_reward = 0.0
-        self._prev_move_features = np.zeros(4, dtype=np.float32)
         
         # Regenerate world
         self._generate_shelters()
@@ -229,7 +227,6 @@ class World:
         # Apply movement cost
         if old_position != new_position:
             self.agent.deplete_hunger(self.config.movement_cost)
-        self._prev_move_features = self._encode_move_features(old_position, new_position)
         
         # 2. Check if agent is in shelter
         self.agent.is_in_shelter = new_position in self._shelter_positions
@@ -375,14 +372,14 @@ class World:
     def get_observation(self) -> np.ndarray:
         """
         Generate the observation array for the RL agent.
-        
+
         The observation is a multi-channel grid centered on the agent:
-        - Channel 0: Enemy count (normalized)
+        - Channel 0: Enemy presence (binary)
         - Channel 1: Food presence (binary)
         - Channel 2: Shelter presence (binary)
-        
-        Plus agent stats and previous movement direction.
-        
+
+        Plus scalar agent stats (health, hunger, in_shelter).
+
         Returns:
             Flattened observation array
         """
@@ -427,30 +424,9 @@ class World:
             self.agent.health / self.agent.max_health,
             self.agent.hunger / self.agent.max_hunger,
             1.0 if self.agent.is_in_shelter else 0.0,
-            *self._prev_move_features,
         )
         return observation
 
-    @staticmethod
-    def _encode_move_features(
-        old_position: Tuple[int, int],
-        new_position: Tuple[int, int],
-    ) -> np.ndarray:
-        features = np.zeros(4, dtype=np.float32)
-        dx = new_position[0] - old_position[0]
-        dy = new_position[1] - old_position[1]
-
-        if dy < 0:
-            features[0] = 1.0
-        elif dy > 0:
-            features[1] = 1.0
-        elif dx < 0:
-            features[2] = 1.0
-        elif dx > 0:
-            features[3] = 1.0
-
-        return features
-    
     @property
     def observation_size(self) -> int:
         """Calculate the size of the observation vector."""

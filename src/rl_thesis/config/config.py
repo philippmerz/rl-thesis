@@ -65,7 +65,7 @@ class WorldConfig:
     # Observation settings
     observation_radius: int = 7           # Agent's vision radius
     num_spatial_channels: int = 3         # enemy, food, shelter channels
-    num_agent_stats: int = 7              # health, hunger, in_shelter, prev_move_{up,down,left,right}
+    num_agent_stats: int = 3              # health, hunger, in_shelter
 
     @property
     def observation_grid_size(self) -> int:
