@@ -87,7 +87,15 @@ from rl_thesis.config.config import WorldConfig
 
 REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
     # Feasible baseline: all constraints C1-C7 satisfied.
+    # Uses delta-based (PBRS) proximity reward.
     "baseline": {},
+
+    # Original baseline with absolute proximity reward.
+    # Produces food hovering: the accumulated proximity stream
+    # (~36.6 over an episode) dominates the one-time food reward (+5).
+    "absolute_proximity": {
+        "proximity_delta": False,
+    },
 
     # Deliberate C1 violation (anti-stasis). Proximity below the
     # movement break-even threshold: w_prox=0.02 < 0.0225.

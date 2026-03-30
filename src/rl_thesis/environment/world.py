@@ -200,6 +200,7 @@ class World:
         # Reset state
         self.ticks = 0
         self.episode_reward = 0.0
+        self._prev_closeness = 0.0
         
         # Regenerate world
         self._generate_shelters()
@@ -295,7 +296,13 @@ class World:
             if nearest_food_distance is not None:
                 max_visible_distance = 2 * self.config.observation_radius
                 closeness = (max_visible_distance - nearest_food_distance + 1) / (max_visible_distance + 1)
+            else:
+                closeness = 0.0
+            if self.config.proximity_delta:
+                reward += self.config.reward_food_visible_proximity * (closeness - self._prev_closeness)
+            else:
                 reward += self.config.reward_food_visible_proximity * closeness
+            self._prev_closeness = closeness
         
         if self.agent.is_in_shelter and self._has_nearby_enemy(3):
             reward += self.config.reward_shelter_safety

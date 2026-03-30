@@ -93,6 +93,7 @@ class WorldConfig:
     reward_hunger_proportional: float = -0.3
     reward_food_visible_proximity: float = 0.1
     reward_shelter_safety: float = 0.1
+    proximity_delta: bool = True
 
 @dataclass
 class HumanHeuristicConfig:
