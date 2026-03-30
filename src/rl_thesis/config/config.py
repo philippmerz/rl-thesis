@@ -107,7 +107,7 @@ class VisualizationConfig:
     # Window settings
     cell_size: int = 10                   # Pixels per grid cell
     fps: int = 30                         # Target frames per second
-    
+   
     # Colors (RGB)
     background_color: Tuple[int, int, int] = (0, 0, 0)
     agent_color: Tuple[int, int, int] = (0, 191, 255)       # Deep sky blue

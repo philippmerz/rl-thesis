@@ -354,13 +354,15 @@ All experiments run on a single Apple Silicon laptop (M-series, MPS backend). Ea
 \subsection{Failure Modes}
 \label{sec:failure_modes}
 
-Early experiments revealed two degenerate policies that emerged reliably under certain reward configurations.
+Early experiments revealed three degenerate policies that emerged reliably under certain reward configurations.
 
-\paragraph{Oscillation.} The agent alternates between two adjacent cells indefinitely. This occurs when a per-tick survival reward provides sufficient return through passivity. With $w_\text{tick} = 0.1$ and $\gamma = 0.99$, the discounted return from oscillating for 700 ticks until starvation death is approximately $+9.9$, while the death penalty discounted to $t = 700$ contributes only $-0.13$. The agent has found the true optimal policy for this reward function: collect ticks while avoiding risk.
+\paragraph{Oscillation (C3 violation).} The agent alternates between two adjacent cells indefinitely. This occurs when a per-tick survival reward provides sufficient return through passivity. With $w_\text{tick} = 0.1$ and $\gamma = 0.99$, the discounted return from oscillating for 700 ticks until starvation death is approximately $+9.9$, while the death penalty discounted to $t = 700$ contributes only $-0.13$. The agent has found the true optimal policy for this reward function: collect ticks while avoiding risk. Constraint C3 prevents this by requiring that passive returns remain negative.
 
-\paragraph{Food hovering.} The agent moves near food but does not eat it. This occurs when the food proximity reward exceeds the hunger penalty. An agent 5 cells from food with $w_\text{prox} = 0.5$ earns $+0.33$ per tick from proximity, while the average hunger penalty is $-0.15$ per tick, yielding a positive net reward for inaction. Eating the food would remove the proximity stream.
+\paragraph{Food hovering (C2 violation).} The agent moves near food but does not eat it. This occurs when the food proximity reward exceeds the hunger penalty. An agent 5 cells from food with $w_\text{prox} = 0.5$ earns $+0.33$ per tick from proximity, while the average hunger penalty is $-0.15$ per tick, yielding a positive net reward for inaction. Eating the food would remove the proximity stream. Constraint C2 prevents this by bounding $w_\text{prox}$ below $|w_\text{hprop}|/2$.
 
-Both failure modes are instances of reward hacking~\citep{Amodei2016}: the agent optimizes the reward function as specified, but the resulting behavior diverges from the designer's intent. They motivate the feasibility constraints derived in Section~\ref{sec:reward_configs}.
+\paragraph{Suicide (C1 violation).} When the proximity gradient is too weak to guide the agent toward food (C1 violated), the agent cannot learn to forage. Without foraging, every tick accumulates hunger-proportional penalty. A stationary agent surviving 700 ticks until starvation accumulates approximately $-135$ from $w_\text{hprop}$ and $-100$ from $w_\text{sdm}$, totaling $-245$ before the death penalty. The agent discovers that dying quickly is preferable: seeking enemies yields a fast death at total cost $\approx -24$ (a few enemy hits plus the death penalty), roughly 10$\times$ less than slow starvation. This is a rational response to a reward function where living is more expensive than dying.
+
+All three failure modes are instances of reward hacking~\citep{Amodei2016}: the agent optimizes the reward function as specified, but the resulting behavior diverges from the designer's intent. They motivate the feasibility constraints derived in Section~\ref{sec:reward_configs}.
 
 \subsection{Reward Configurations}
 \label{sec:reward_configs}
@@ -386,7 +388,7 @@ Let $D = 2 r_\text{obs}$ denote the observation diameter. The constraints are:
     $f > \bar{d} \cdot c$.
 \end{enumerate}
 
-The oscillation failure (Section~\ref{sec:failure_modes}) corresponds to a C3 violation; food hovering corresponds to a C2 violation.
+Each failure mode in Section~\ref{sec:failure_modes} maps to a specific constraint violation: oscillation to C3, food hovering to C2, and suicide to C1.
 
 Table~\ref{tab:reward_configs} defines three reward configurations. The \textsc{baseline} satisfies all constraints. The two diagnostic configurations each violate a specific constraint to confirm the predicted failure mode.
 
@@ -401,6 +403,8 @@ Configuration & Modification & Violated constraint \\
 \midrule
 \textsc{baseline}        & (none --- default weights)              & (none) \\
 \textsc{weak\_proximity} & $w_\text{prox} = 0.02$                  & C1 (anti-stasis) \\
+\textsc{no\_death}       & $w_\text{death} = 0$                    & C6 (terminal signal) \\
+\textsc{death\_only}     & all weights zero except $w_\text{death}$ & sparse signal \\
 \textsc{free\_movement}  & movement cost $c = 0.0$                 & diagnostic \\
 \bottomrule
 \end{tabular}
@@ -408,7 +412,11 @@ Configuration & Modification & Violated constraint \\
 
 \paragraph{Baseline.} The default weights (Table~\ref{tab:default_rewards}) satisfy all seven constraints. Zero survival tick eliminates passive reward, strong hunger-proportional penalty ($-0.3$) creates urgency, and the food proximity gradient ($+0.1$) provides a directional signal without dominating the reward budget. This is the primary configuration expected to produce active foraging.
 
-\paragraph{Weak proximity.} Reduces $w_\text{prox}$ from $0.1$ to $0.02$, violating C1: the proximity gain from one step toward food ($0.02$) falls below the hunger penalty from the movement cost ($|w_\text{hprop}| \cdot c \cdot (D+1) / u_\text{max} = 0.0225$). The predicted failure is stasis: the agent learns to stay still because moving toward food costs more than it gains.
+\paragraph{Weak proximity.} Reduces $w_\text{prox}$ from $0.1$ to $0.02$, violating C1: the proximity gain from one step toward food ($0.02$) falls below the hunger penalty from the movement cost ($|w_\text{hprop}| \cdot c \cdot (D+1) / u_\text{max} = 0.0225$). Without a viable foraging strategy, the agent converges to the suicide failure mode: seeking enemies to die quickly or oscillating to accelerate starvation, both of which truncate the accumulating hunger penalty.
+
+\paragraph{No death.} Removes the death penalty ($w_\text{death} = 0$), violating C6. All per-step shaping signals remain. Tests whether TD bootstrapping of a terminal signal is necessary for learning survival, or whether the accumulated per-step penalties (hunger, starvation damage, enemy damage) are sufficient on their own.
+
+\paragraph{Death only.} Removes all per-step rewards, leaving only the terminal death penalty ($w_\text{death} = -10$). The agent receives zero signal until the episode ends in death. This is the sparsest possible reward for the survival task and tests the credit assignment limit: can the agent attribute a death at $t = 700$ to actions taken hundreds of steps earlier, with no intermediate gradient?
 
 \paragraph{Free movement.} Sets the movement hunger cost to zero while keeping all reward weights at baseline values. If the agent still oscillates under this configuration, oscillation is a training artifact rather than a reward-rational strategy, since the reward incentive to move toward food is unambiguously positive.
 
