@@ -160,6 +160,32 @@ REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
         "reward_enemy_damage_taken": -0.5,
         "reward_enemy_proximity": -0.5,
     },
+
+    # Engineered v2: addresses hunger conservation plateau.
+    #
+    # The v1 agent forages well and avoids enemies but moves too much,
+    # burning hunger ~3.5x faster than the heuristic (which idles near
+    # shelter). Changes from v1:
+    #
+    # 1. Raise low_hunger threshold from 30% to 50%: creates urgency
+    #    earlier, incentivizing food-seeking before critical levels.
+    # 2. Add small hunger_proportional (-0.02): provides continuous
+    #    gradient for hunger conservation without violating C1.
+    #    PV of movement cost: 0.02*0.5/100/0.01 = 0.01/step
+    #    Proximity reward: 0.15/15 = 0.01/step (break-even)
+    # 3. Stronger shelter_safety (0.3): rewards idle shelter behavior.
+    # 4. Stronger food_eaten (10.0): compensates for hunger_proportional
+    #    drag, ensures foraging trips remain strongly Q-positive.
+    "engineered_v2": {
+        "reward_hunger_proportional": -0.02,
+        "reward_low_hunger": -0.5,
+        "low_hunger_threshold": 0.5,
+        "reward_food_eaten": 10.0,
+        "reward_food_visible_proximity": 0.15,
+        "reward_enemy_damage_taken": -0.5,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_safety": 0.3,
+    },
 }
 
 
@@ -191,6 +217,7 @@ def describe_config(config_name: str) -> Dict[str, Any]:
         "reward_food_visible_proximity": wc.reward_food_visible_proximity,
         "reward_enemy_proximity": wc.reward_enemy_proximity,
         "reward_shelter_safety": wc.reward_shelter_safety,
+        "low_hunger_threshold": wc.low_hunger_threshold,
     }
 
 

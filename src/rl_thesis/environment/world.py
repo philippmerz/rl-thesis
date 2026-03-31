@@ -285,11 +285,11 @@ class World:
         if self.agent.is_starving:
             self.agent.take_damage(self.config.starvation_damage)
             reward += self.config.reward_starvation_damage * self.config.starvation_damage
-        elif self.agent.hunger_ratio > 0.3:
+        elif self.agent.hunger_ratio > self.config.low_hunger_threshold:
             self.agent.regenerate(self.config.health_regen_rate)
         
         # 7. Reward shaping
-        if self.agent.hunger_ratio < 0.3:
+        if self.agent.hunger_ratio < self.config.low_hunger_threshold:
             reward += self.config.reward_low_hunger
 
         reward += self.config.reward_hunger_proportional * (1.0 - self.agent.hunger_ratio)

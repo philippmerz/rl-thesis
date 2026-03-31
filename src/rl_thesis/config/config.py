@@ -90,6 +90,7 @@ class WorldConfig:
     reward_enemy_damage_taken: float = -0.1
     reward_starvation_damage: float = -1.0
     reward_low_hunger: float = 0.0
+    low_hunger_threshold: float = 0.3
     reward_hunger_proportional: float = -0.3
     reward_food_visible_proximity: float = 0.1
     reward_enemy_proximity: float = 0.0
@@ -138,7 +139,7 @@ class DQNConfig:
     gamma: float = 0.99
     batch_size: int = 128
     weight_decay: float = 1e-4
-    n_step: int = 3                       # Multi-step returns horizon
+    n_step: int = 5                       # Multi-step returns horizon
 
     # Replay buffer
     buffer_size: int = 500_000
@@ -149,7 +150,7 @@ class DQNConfig:
 
     # Exploration (epsilon-greedy)
     epsilon_start: float = 1.0
-    epsilon_end: float = 0.05
+    epsilon_end: float = 0.01
     epsilon_decay_steps: int = 500_000
 
     # Training duration
