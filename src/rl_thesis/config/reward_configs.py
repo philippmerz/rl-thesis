@@ -134,6 +134,32 @@ REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
         "reward_food_visible_proximity": 0.0,
         "reward_shelter_safety": 0.0,
     },
+
+    # Engineered: analytically designed to produce all three
+    # heuristic behaviors (flee, forage, shelter) as emergent
+    # Q-value optima.
+    #
+    # Key changes:
+    # 1. Remove hunger_proportional: eliminates the structural C1
+    #    incompatibility (PV of movement cost at gamma=0.99 exceeds
+    #    any feasible proximity reward by factor 22).
+    # 2. Enable low_hunger threshold penalty (-0.5 at <30% hunger):
+    #    creates urgency without the proportional-to-movement-cost
+    #    coupling. Flat penalty means movement doesn't amplify cost.
+    # 3. Stronger food reward (8.0) and proximity (0.15): compensate
+    #    for removed hunger gradient; PV of eating at distance 5 is
+    #    ~+22 from delayed threshold penalty alone.
+    # 4. Enemy proximity (PBRS delta): flee gradient before contact,
+    #    5x food proximity gradient. Only when not in shelter.
+    # 5. Stronger damage penalty: -7.5 per hit vs +8.0 per food.
+    "engineered": {
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": -0.5,
+        "reward_food_eaten": 8.0,
+        "reward_food_visible_proximity": 0.15,
+        "reward_enemy_damage_taken": -0.5,
+        "reward_enemy_proximity": -0.5,
+    },
 }
 
 
@@ -163,6 +189,7 @@ def describe_config(config_name: str) -> Dict[str, Any]:
         "reward_low_hunger": wc.reward_low_hunger,
         "reward_hunger_proportional": wc.reward_hunger_proportional,
         "reward_food_visible_proximity": wc.reward_food_visible_proximity,
+        "reward_enemy_proximity": wc.reward_enemy_proximity,
         "reward_shelter_safety": wc.reward_shelter_safety,
     }
 

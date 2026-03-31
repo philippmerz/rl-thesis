@@ -99,15 +99,20 @@ class DQNAgent:
         effective_training_steps = max(
             self.config.total_timesteps - self.config.min_buffer_size + 1, 1
         )
-        self.lr_scheduler = optim.lr_scheduler.OneCycleLR(
-            self.optimizer,
-            max_lr=self.config.learning_rate,
-            total_steps=effective_training_steps,
-            pct_start=0.05,
-            anneal_strategy='cos',
-            div_factor=10,
-            final_div_factor=10,
-        )
+        if self.config.lr_schedule == "constant":
+            self.lr_scheduler = optim.lr_scheduler.LambdaLR(
+                self.optimizer, lr_lambda=lambda _: 1.0,
+            )
+        else:
+            self.lr_scheduler = optim.lr_scheduler.OneCycleLR(
+                self.optimizer,
+                max_lr=self.config.learning_rate,
+                total_steps=effective_training_steps,
+                pct_start=0.05,
+                anneal_strategy='cos',
+                div_factor=10,
+                final_div_factor=10,
+            )
         
         self.replay_buffer = NStepPrioritizedBuffer(
             capacity=self.config.buffer_size,
@@ -202,8 +207,9 @@ class DQNAgent:
 
         self.updates_done += 1
         
-        # Step the learning rate scheduler (guard against overshoot)
-        if self.lr_scheduler._step_count <= self.lr_scheduler.total_steps:
+        # Step the learning rate scheduler (guard against overshoot for OneCycleLR)
+        total = getattr(self.lr_scheduler, 'total_steps', None)
+        if total is None or self.lr_scheduler._step_count <= total:
             self.lr_scheduler.step()
         
         self._soft_update_target()

@@ -14,6 +14,8 @@ from tqdm import tqdm
 
 from rl_thesis.environment.gym_env import SurvivalEnv
 from rl_thesis.agent.dqn import DQNAgent
+from rl_thesis.agent.human_heuristic import HumanHeuristicAgent
+from rl_thesis.config.config import HumanHeuristicConfig
 from rl_thesis.training.metrics import MetricsLogger
 
 if TYPE_CHECKING:
@@ -51,7 +53,37 @@ class Trainer:
         self.on_episode_end: Optional[Callable[[int, Dict], None]] = None
         self.on_checkpoint: Optional[Callable[[int, str], None]] = None
         self._latest_checkpoint_step = self._discover_latest_checkpoint_step()
+        self._best_eval_survival = -float('inf')
         self._show_progress = sys.stdout.isatty()
+
+    def load_demonstrations(self, num_episodes: int = 100, start_seed: int = 5000) -> int:
+        """Pre-fill the replay buffer with heuristic agent demonstrations.
+
+        Returns the number of transitions added.
+        """
+        demo_env = SurvivalEnv(self.world_config)
+        heuristic = HumanHeuristicAgent(
+            hunger_threshold=HumanHeuristicConfig.hunger_threshold,
+            flee_radius=HumanHeuristicConfig.flee_radius,
+        )
+        total_transitions = 0
+
+        for ep in range(num_episodes):
+            state, _ = demo_env.reset(seed=start_seed + ep)
+            world = demo_env.get_world()
+
+            while True:
+                action = heuristic.select_action(world)
+                next_state, reward, terminated, truncated, info = demo_env.step(action)
+                self.agent.store_transition(state, action, reward, next_state, terminated)
+                total_transitions += 1
+                state = next_state
+                if terminated or truncated:
+                    if not terminated:
+                        self.agent.discard_pending()
+                    break
+
+        return total_transitions
 
     def train(
         self,
@@ -152,6 +184,10 @@ class Trainer:
                     epsilon=self.agent.epsilon,
                     loss=avg_loss,
                 )
+                if eval_results['survival'] > self._best_eval_survival:
+                    self._best_eval_survival = eval_results['survival']
+                    self.agent.save(str(self.checkpoint_dir / "model_best.pt"))
+
                 pbar.set_postfix({
                     "eval": f"{eval_results['reward']:.1f}",
                     "surv": f"{eval_results['survival']:.0f}",

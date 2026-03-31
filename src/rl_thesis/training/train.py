@@ -18,7 +18,8 @@ def _format_time(seconds: float) -> str:
 
 
 def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
-               checkpoint: str | None = None) -> None:
+               checkpoint: str | None = None,
+               demo_episodes: int = 0) -> None:
     """Train a single (config, seed) combination.
 
     If *checkpoint* is provided, training resumes from that file.
@@ -47,6 +48,10 @@ def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
 
     if not checkpoint:
         trainer.metrics.save_run_config(config_name, seed, world_config, dqn)
+
+    if demo_episodes > 0 and not checkpoint:
+        n = trainer.load_demonstrations(num_episodes=demo_episodes)
+        print(f"Loaded {n:,} demonstration transitions from {demo_episodes} heuristic episodes")
 
     try:
         metrics = trainer.train(total_steps=dqn.total_timesteps)

@@ -44,12 +44,34 @@ def train(
         None, "--resume", "-r",
         help="Path to checkpoint to resume from",
     ),
+    steps: int = typer.Option(
+        None, "--steps",
+        help="Override total timesteps (default from DQNConfig)",
+    ),
+    lr_schedule: str = typer.Option(
+        "onecycle", "--lr-schedule",
+        help="LR schedule: 'onecycle' or 'constant'",
+    ),
+    eval_episodes: int = typer.Option(
+        None, "--eval-episodes",
+        help="Override number of evaluation episodes",
+    ),
+    demos: int = typer.Option(
+        0, "--demos",
+        help="Number of heuristic demonstration episodes to pre-load (0=disabled)",
+    ),
 ):
     """Train a single (config, seed) run."""
+    from dataclasses import replace as _replace
     from rl_thesis.training.train import run_single
 
-    run_single(config_name=config, seed=seed, dqn_config=DQNConfig(),
-               checkpoint=resume)
+    dqn = DQNConfig(lr_schedule=lr_schedule)
+    if steps is not None:
+        dqn = _replace(dqn, total_timesteps=steps)
+    if eval_episodes is not None:
+        dqn = _replace(dqn, eval_episodes=eval_episodes)
+    run_single(config_name=config, seed=seed, dqn_config=dqn,
+               checkpoint=resume, demo_episodes=demos)
 
 
 @app.command(name="train-grid")
@@ -120,6 +142,37 @@ def reward_sweep(
     )
     if exit_code != 0:
         raise typer.Exit(code=exit_code)
+
+
+@app.command()
+def benchmark(
+    checkpoint: str = typer.Option(
+        None, "--checkpoint", "-c",
+        help="Path to DQN checkpoint to compare against heuristic",
+    ),
+    config: str = typer.Option(
+        None, "--config",
+        help="Reward config name (for world config). Default uses WorldConfig defaults.",
+    ),
+    episodes: int = typer.Option(100, "--episodes", "-n", help="Number of episodes"),
+    start_seed: int = typer.Option(1000, "--start-seed", help="First episode seed"),
+):
+    """Benchmark: evaluate heuristic (and optionally a DQN checkpoint)."""
+    from rl_thesis.training.benchmark import (
+        evaluate_heuristic, evaluate_dqn, summarize, compare,
+    )
+    from rl_thesis.config.reward_configs import make_world_config as _make
+
+    wc = _make(config) if config else WorldConfig()
+    print(f"Evaluating over {episodes} episodes (seeds {start_seed}-{start_seed + episodes - 1})")
+
+    h_results = evaluate_heuristic(wc, episodes, start_seed)
+    summarize(h_results, "Heuristic Agent")
+
+    if checkpoint:
+        d_results = evaluate_dqn(checkpoint, wc, episodes, start_seed)
+        summarize(d_results, f"DQN ({checkpoint})")
+        compare(h_results, d_results)
 
 
 if __name__ == "__main__":

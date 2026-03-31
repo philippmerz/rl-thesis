@@ -70,6 +70,8 @@ class World:
         # World state
         self.ticks = 0
         self.episode_reward = 0.0
+        self._prev_closeness = 0.0
+        self._prev_enemy_closeness = 0.0
 
         # Generate static elements
         self._generate_shelters()
@@ -201,6 +203,7 @@ class World:
         self.ticks = 0
         self.episode_reward = 0.0
         self._prev_closeness = 0.0
+        self._prev_enemy_closeness = 0.0
         
         # Regenerate world
         self._generate_shelters()
@@ -304,6 +307,17 @@ class World:
                 reward += self.config.reward_food_visible_proximity * closeness
             self._prev_closeness = closeness
         
+        if self.config.reward_enemy_proximity != 0.0:
+            nearest_enemy_distance = self._nearest_visible_enemy_distance()
+            if nearest_enemy_distance is not None:
+                max_visible_distance = 2 * self.config.observation_radius
+                enemy_closeness = (max_visible_distance - nearest_enemy_distance + 1) / (max_visible_distance + 1)
+            else:
+                enemy_closeness = 0.0
+            if not self.agent.is_in_shelter:
+                reward += self.config.reward_enemy_proximity * (enemy_closeness - self._prev_enemy_closeness)
+            self._prev_enemy_closeness = enemy_closeness
+
         if self.agent.is_in_shelter and self._has_nearby_enemy(3):
             reward += self.config.reward_shelter_safety
 
@@ -343,6 +357,22 @@ class World:
             if enemy.position.distance_to(agent_pos) <= radius:
                 return True
         return False
+
+    def _nearest_visible_enemy_distance(self) -> int | None:
+        """Return Manhattan distance to nearest visible enemy tile."""
+        agent_x, agent_y = self.agent.position.as_tuple()
+        radius = self.config.observation_radius
+        nearest_distance = None
+
+        for enemy_pos in self._enemy_positions:
+            ex, ey = enemy_pos
+            if abs(ex - agent_x) > radius or abs(ey - agent_y) > radius:
+                continue
+            distance = abs(ex - agent_x) + abs(ey - agent_y)
+            if nearest_distance is None or distance < nearest_distance:
+                nearest_distance = distance
+
+        return nearest_distance
 
     def _nearest_visible_food_distance(self) -> int | None:
         """Return the Manhattan distance to the nearest visible food tile."""

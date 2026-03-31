@@ -92,6 +92,7 @@ class WorldConfig:
     reward_low_hunger: float = 0.0
     reward_hunger_proportional: float = -0.3
     reward_food_visible_proximity: float = 0.1
+    reward_enemy_proximity: float = 0.0
     reward_shelter_safety: float = 0.1
     proximity_delta: bool = True
 
@@ -160,5 +161,8 @@ class DQNConfig:
     eval_freq: int = 5_000
     eval_episodes: int = 10
     
+    # Learning rate schedule
+    lr_schedule: str = "onecycle"  # "onecycle" or "constant"
+
     # Device
     device: str = "auto"  # "auto" picks cuda > mps > cpu; override with "cuda"/"mps"/"cpu"
