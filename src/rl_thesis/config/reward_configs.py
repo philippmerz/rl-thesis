@@ -186,6 +186,34 @@ REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
         "reward_enemy_proximity": -0.5,
         "reward_shelter_safety": 0.3,
     },
+
+    # Engineered v3: conditional proximity + hunger conservation.
+    #
+    # Key insight from v1 analysis: the agent forages well (2x heuristic
+    # food) and avoids enemies (4x less damage/tick) but moves every tick,
+    # burning hunger 3.5x faster. The heuristic idles near shelter when
+    # well-fed.
+    #
+    # The fix: gate food proximity reward behind the hunger threshold.
+    # When well-fed (hunger > 50%), no proximity pull toward food.
+    # The shelter reward becomes the dominant signal, teaching "stay put."
+    # When hungry (hunger < 50%), full proximity gradient activates.
+    #
+    # This mirrors the heuristic's conditional logic through reward design:
+    #   hungry -> forage (proximity + food_eaten)
+    #   well-fed -> shelter (shelter_safety, no competing proximity)
+    #   enemy nearby -> flee (enemy_proximity, always active)
+    "engineered_v3": {
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": -0.5,
+        "low_hunger_threshold": 0.5,
+        "reward_food_eaten": 8.0,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": -0.5,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_safety": 0.2,
+    },
 }
 
 

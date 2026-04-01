@@ -301,10 +301,14 @@ class World:
                 closeness = (max_visible_distance - nearest_food_distance + 1) / (max_visible_distance + 1)
             else:
                 closeness = 0.0
-            if self.config.proximity_delta:
-                reward += self.config.reward_food_visible_proximity * (closeness - self._prev_closeness)
-            else:
-                reward += self.config.reward_food_visible_proximity * closeness
+
+            hungry = (not self.config.proximity_only_when_hungry
+                      or self.agent.hunger_ratio < self.config.low_hunger_threshold)
+            if hungry:
+                if self.config.proximity_delta:
+                    reward += self.config.reward_food_visible_proximity * (closeness - self._prev_closeness)
+                else:
+                    reward += self.config.reward_food_visible_proximity * closeness
             self._prev_closeness = closeness
         
         if self.config.reward_enemy_proximity != 0.0:
