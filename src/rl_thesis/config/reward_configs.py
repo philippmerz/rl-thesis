@@ -214,6 +214,33 @@ REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
         "reward_enemy_proximity": -0.5,
         "reward_shelter_safety": 0.2,
     },
+
+    # Engineered v4: symmetric proximity gradients.
+    #
+    # V1-V3 all plateau at ~620-680 survival because the agent never
+    # learns to navigate TO shelter when well-fed. The shelter_safety
+    # reward is binary (in/out), giving no gradient for approach.
+    #
+    # Fix: add shelter proximity (PBRS delta) that mirrors food proximity.
+    # When hungry (< 50%): food proximity active, shelter proximity off.
+    # When well-fed (>= 50%): shelter proximity active, food proximity off.
+    # This creates symmetric approach gradients for both behavioral modes.
+    #
+    # Also adds small survival_tick (0.05) to directly reward each tick
+    # alive, making conservation strategies Q-value positive.
+    "engineered_v4": {
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": -0.5,
+        "low_hunger_threshold": 0.5,
+        "reward_food_eaten": 8.0,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": -0.5,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.2,
+        "reward_survival_tick": 0.05,
+    },
 }
 
 
@@ -244,6 +271,7 @@ def describe_config(config_name: str) -> Dict[str, Any]:
         "reward_hunger_proportional": wc.reward_hunger_proportional,
         "reward_food_visible_proximity": wc.reward_food_visible_proximity,
         "reward_enemy_proximity": wc.reward_enemy_proximity,
+        "reward_shelter_proximity": wc.reward_shelter_proximity,
         "reward_shelter_safety": wc.reward_shelter_safety,
         "low_hunger_threshold": wc.low_hunger_threshold,
     }

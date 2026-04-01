@@ -95,6 +95,7 @@ class WorldConfig:
     reward_food_visible_proximity: float = 0.1
     proximity_only_when_hungry: bool = False
     reward_enemy_proximity: float = 0.0
+    reward_shelter_proximity: float = 0.0
     reward_shelter_safety: float = 0.1
     proximity_delta: bool = True
 

@@ -72,6 +72,7 @@ class World:
         self.episode_reward = 0.0
         self._prev_closeness = 0.0
         self._prev_enemy_closeness = 0.0
+        self._prev_shelter_closeness = 0.0
 
         # Generate static elements
         self._generate_shelters()
@@ -204,6 +205,7 @@ class World:
         self.episode_reward = 0.0
         self._prev_closeness = 0.0
         self._prev_enemy_closeness = 0.0
+        self._prev_shelter_closeness = 0.0
         
         # Regenerate world
         self._generate_shelters()
@@ -322,6 +324,18 @@ class World:
                 reward += self.config.reward_enemy_proximity * (enemy_closeness - self._prev_enemy_closeness)
             self._prev_enemy_closeness = enemy_closeness
 
+        if self.config.reward_shelter_proximity != 0.0:
+            nearest_shelter_distance = self._nearest_visible_shelter_distance()
+            if nearest_shelter_distance is not None:
+                max_visible_distance = 2 * self.config.observation_radius
+                shelter_closeness = (max_visible_distance - nearest_shelter_distance + 1) / (max_visible_distance + 1)
+            else:
+                shelter_closeness = 0.0
+            well_fed = self.agent.hunger_ratio >= self.config.low_hunger_threshold
+            if well_fed:
+                reward += self.config.reward_shelter_proximity * (shelter_closeness - self._prev_shelter_closeness)
+            self._prev_shelter_closeness = shelter_closeness
+
         if self.agent.is_in_shelter and self._has_nearby_enemy(3):
             reward += self.config.reward_shelter_safety
 
@@ -376,6 +390,19 @@ class World:
             if nearest_distance is None or distance < nearest_distance:
                 nearest_distance = distance
 
+        return nearest_distance
+
+    def _nearest_visible_shelter_distance(self) -> int | None:
+        """Return Manhattan distance to nearest visible shelter tile."""
+        agent_x, agent_y = self.agent.position.as_tuple()
+        radius = self.config.observation_radius
+        nearest_distance = None
+        for sx, sy in self._shelter_positions:
+            if abs(sx - agent_x) > radius or abs(sy - agent_y) > radius:
+                continue
+            distance = abs(sx - agent_x) + abs(sy - agent_y)
+            if nearest_distance is None or distance < nearest_distance:
+                nearest_distance = distance
         return nearest_distance
 
     def _nearest_visible_food_distance(self) -> int | None:
