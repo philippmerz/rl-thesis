@@ -228,6 +228,28 @@ REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
     #
     # Also adds small survival_tick (0.05) to directly reward each tick
     # alive, making conservation strategies Q-value positive.
+    # Engineered v5: minimal reward set.
+    #
+    # Only three proximity gradients + death. No food_eaten, no
+    # starvation_damage, no hunger penalties, no shelter_safety.
+    # The hypothesis: fewer signals reduce Q-network confusion.
+    # The three PBRS delta proximities directly encode the behavioral
+    # switch (hungry->food, well-fed->shelter, enemy->flee).
+    "engineered_v5": {
+        "reward_food_eaten": 0.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+    },
+
     "engineered_v4": {
         "reward_hunger_proportional": 0.0,
         "reward_low_hunger": -0.5,
