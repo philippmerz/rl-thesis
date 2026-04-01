@@ -19,7 +19,8 @@ def _format_time(seconds: float) -> str:
 
 def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
                checkpoint: str | None = None,
-               demo_episodes: int = 0) -> None:
+               demo_episodes: int = 0,
+               bc_episodes: int = 0) -> None:
     """Train a single (config, seed) combination.
 
     If *checkpoint* is provided, training resumes from that file.
@@ -48,6 +49,10 @@ def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
 
     if not checkpoint:
         trainer.metrics.save_run_config(config_name, seed, world_config, dqn)
+
+    if bc_episodes > 0 and not checkpoint:
+        print(f"Behavioral cloning pre-training ({bc_episodes} heuristic episodes)...")
+        trainer.pretrain_behavioral_cloning(num_episodes=bc_episodes)
 
     if demo_episodes > 0 and not checkpoint:
         n = trainer.load_demonstrations(num_episodes=demo_episodes)

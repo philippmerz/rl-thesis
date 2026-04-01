@@ -375,6 +375,52 @@ class DQNAgent:
         self.updates_done = checkpoint['updates_done']
         self.epsilon = checkpoint['epsilon']
     
+    def pretrain_behavioral_cloning(
+        self,
+        states: np.ndarray,
+        actions: np.ndarray,
+        epochs: int = 10,
+        batch_size: int = 256,
+    ) -> list[float]:
+        """Pre-train the policy network to imitate expert actions.
+
+        Uses cross-entropy loss on Q-network logits to make the network
+        predict the expert action for each state.  After pre-training the
+        target network is synced.
+
+        Returns per-epoch mean losses.
+        """
+        dataset_size = len(states)
+        states_t = torch.from_numpy(states).float().to(self.device)
+        actions_t = torch.from_numpy(actions).long().to(self.device)
+
+        bc_optimizer = optim.Adam(self.policy_net.parameters(), lr=1e-3)
+        loss_fn = nn.CrossEntropyLoss()
+
+        epoch_losses: list[float] = []
+        for epoch in range(epochs):
+            perm = torch.randperm(dataset_size, device=self.device)
+            running_loss = 0.0
+            n_batches = 0
+            for i in range(0, dataset_size, batch_size):
+                idx = perm[i:i + batch_size]
+                logits = self.policy_net(states_t[idx])
+                loss = loss_fn(logits, actions_t[idx])
+
+                bc_optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 1.0)
+                bc_optimizer.step()
+
+                running_loss += loss.item()
+                n_batches += 1
+
+            epoch_losses.append(running_loss / max(n_batches, 1))
+
+        # Sync target network
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+        return epoch_losses
+
     @classmethod
     def from_checkpoint(cls, path: str) -> 'DQNAgent':
         """

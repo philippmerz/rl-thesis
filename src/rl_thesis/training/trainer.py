@@ -56,6 +56,48 @@ class Trainer:
         self._best_eval_survival = -float('inf')
         self._show_progress = sys.stdout.isatty()
 
+    def pretrain_behavioral_cloning(
+        self,
+        num_episodes: int = 200,
+        start_seed: int = 6000,
+        epochs: int = 10,
+    ) -> list[float]:
+        """Collect heuristic demonstrations and pre-train the network via BC.
+
+        Returns per-epoch BC losses.
+        """
+        demo_env = SurvivalEnv(self.world_config)
+        heuristic = HumanHeuristicAgent(
+            hunger_threshold=HumanHeuristicConfig.hunger_threshold,
+            flee_radius=HumanHeuristicConfig.flee_radius,
+        )
+
+        all_states: list[np.ndarray] = []
+        all_actions: list[int] = []
+
+        for ep in range(num_episodes):
+            state, _ = demo_env.reset(seed=start_seed + ep)
+            world = demo_env.get_world()
+            while True:
+                action = heuristic.select_action(world)
+                all_states.append(state)
+                all_actions.append(action)
+                next_state, _, terminated, truncated, _ = demo_env.step(action)
+                state = next_state
+                if terminated or truncated:
+                    break
+
+        states_arr = np.array(all_states)
+        actions_arr = np.array(all_actions)
+        print(f"  BC dataset: {len(states_arr):,} transitions from {num_episodes} episodes")
+
+        losses = self.agent.pretrain_behavioral_cloning(
+            states_arr, actions_arr, epochs=epochs,
+        )
+        for i, loss in enumerate(losses):
+            print(f"  BC epoch {i+1}/{epochs}: loss={loss:.4f}")
+        return losses
+
     def load_demonstrations(self, num_episodes: int = 100, start_seed: int = 5000) -> int:
         """Pre-fill the replay buffer with heuristic agent demonstrations.
 

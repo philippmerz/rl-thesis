@@ -60,6 +60,14 @@ def train(
         0, "--demos",
         help="Number of heuristic demonstration episodes to pre-load (0=disabled)",
     ),
+    bc_episodes: int = typer.Option(
+        0, "--bc-episodes",
+        help="Number of heuristic episodes for behavioral cloning pre-training (0=disabled)",
+    ),
+    epsilon_start: float = typer.Option(
+        None, "--epsilon-start",
+        help="Override initial epsilon (useful after BC pre-training, e.g. 0.1)",
+    ),
 ):
     """Train a single (config, seed) run."""
     from dataclasses import replace as _replace
@@ -70,8 +78,11 @@ def train(
         dqn = _replace(dqn, total_timesteps=steps)
     if eval_episodes is not None:
         dqn = _replace(dqn, eval_episodes=eval_episodes)
+    if epsilon_start is not None:
+        dqn = _replace(dqn, epsilon_start=epsilon_start)
     run_single(config_name=config, seed=seed, dqn_config=dqn,
-               checkpoint=resume, demo_episodes=demos)
+               checkpoint=resume, demo_episodes=demos,
+               bc_episodes=bc_episodes)
 
 
 @app.command(name="train-grid")
