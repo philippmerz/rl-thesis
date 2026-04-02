@@ -82,10 +82,12 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Dict, Any
 
-from rl_thesis.config.config import WorldConfig
+from rl_thesis.config.config import WorldConfig, DQNConfig
 
-
-REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
+# Each config is a dict of WorldConfig field overrides.
+# An optional "_dqn" key holds DQNConfig overrides for the experiment,
+# keeping reward shaping and hyperparameter choices in one place.
+REWARD_CONFIGS: Dict[str, Dict[str, Any]] = {
     # Feasible baseline: all constraints C1-C7 satisfied.
     # Uses delta-based (PBRS) proximity reward.
     "baseline": {},
@@ -228,6 +230,60 @@ REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
     #
     # Also adds small survival_tick (0.05) to directly reward each tick
     # alive, making conservation strategies Q-value positive.
+
+    # Engineered v6: V5 structure + food_eaten reward.
+    #
+    # V5 learned excellent shelter/flee behavior (710 survival, only
+    # 10 damage/episode) but barely forages (0.58 food vs heuristic 1.19).
+    # The survival gap (~60 ticks) is exactly explained by the food gap:
+    # 0.6 food * 100 ticks/food = 60 ticks.
+    #
+    # Root cause: V5 has no food_eaten reward. The food proximity
+    # gradient guides toward food, but eating triggers a state
+    # transition past the hunger threshold, turning off the proximity
+    # signal. From the Q-network's perspective, eating is a transition
+    # to a lower-reward state.
+    #
+    # Fix: add food_eaten=5.0 to make the foraging trip terminal
+    # action explicitly rewarding. Five signals total: three PBRS
+    # delta proximities, one discrete food event, one terminal death.
+    "engineered_v6": {
+        "reward_food_eaten": 5.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+    },
+
+    # V6 with n_step=10: longer credit assignment horizon.
+    # The food_eaten reward at the end of a foraging trip needs to
+    # propagate back through ~5-10 approach steps. With n_step=5,
+    # only the last 5 steps see the reward directly; earlier steps
+    # rely on slow TD bootstrapping. n_step=10 covers the full
+    # typical foraging trajectory.
+    "engineered_v6_n10": {
+        "reward_food_eaten": 5.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "_dqn": {"n_step": 10},
+    },
+
     # Engineered v5: minimal reward set.
     #
     # Only three proximity gradients + death. No food_eaten, no
@@ -266,14 +322,31 @@ REWARD_CONFIGS: Dict[str, Dict[str, float]] = {
 }
 
 
-def make_world_config(config_name: str, seed: int = 42) -> WorldConfig:
-    """Create a WorldConfig with the named reward configuration applied."""
+def _split_overrides(config_name: str) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """Split a config entry into WorldConfig overrides and DQNConfig overrides."""
     if config_name not in REWARD_CONFIGS:
         available = ", ".join(sorted(REWARD_CONFIGS))
         raise ValueError(f"Unknown reward config '{config_name}'. Available: {available}")
+    raw = REWARD_CONFIGS[config_name]
+    dqn_overrides = raw.get("_dqn", {})
+    world_overrides = {k: v for k, v in raw.items() if k != "_dqn"}
+    return world_overrides, dqn_overrides
 
-    overrides = REWARD_CONFIGS[config_name]
-    return replace(WorldConfig(initial_seed=seed), **overrides)
+
+def make_world_config(config_name: str, seed: int = 42) -> WorldConfig:
+    """Create a WorldConfig with the named reward configuration applied."""
+    world_overrides, _ = _split_overrides(config_name)
+    return replace(WorldConfig(initial_seed=seed), **world_overrides)
+
+
+def make_dqn_config(config_name: str, **cli_overrides: Any) -> DQNConfig:
+    """Create a DQNConfig with config-level and CLI overrides applied.
+
+    CLI overrides take precedence over config-level _dqn overrides.
+    """
+    _, dqn_overrides = _split_overrides(config_name)
+    merged = {**dqn_overrides, **cli_overrides}
+    return replace(DQNConfig(), **merged) if merged else DQNConfig()
 
 
 def get_config_names() -> list[str]:

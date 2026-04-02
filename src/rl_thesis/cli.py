@@ -6,7 +6,6 @@ from rl_thesis.config.config import (
     WorldConfig,
     HumanHeuristicConfig,
     VisualizationConfig,
-    DQNConfig,
 )
 
 app = typer.Typer(
@@ -68,18 +67,25 @@ def train(
         None, "--epsilon-start",
         help="Override initial epsilon (useful after BC pre-training, e.g. 0.1)",
     ),
+    n_step: int = typer.Option(
+        None, "--n-step",
+        help="Override n-step return horizon (default 5)",
+    ),
 ):
     """Train a single (config, seed) run."""
-    from dataclasses import replace as _replace
+    from rl_thesis.config.reward_configs import make_dqn_config
     from rl_thesis.training.train import run_single
 
-    dqn = DQNConfig(lr_schedule=lr_schedule)
-    if steps is not None:
-        dqn = _replace(dqn, total_timesteps=steps)
-    if eval_episodes is not None:
-        dqn = _replace(dqn, eval_episodes=eval_episodes)
-    if epsilon_start is not None:
-        dqn = _replace(dqn, epsilon_start=epsilon_start)
+    cli_overrides = {
+        k: v for k, v in {
+            "lr_schedule": lr_schedule,
+            "total_timesteps": steps,
+            "eval_episodes": eval_episodes,
+            "epsilon_start": epsilon_start,
+            "n_step": n_step,
+        }.items() if v is not None
+    }
+    dqn = make_dqn_config(config, **cli_overrides)
     run_single(config_name=config, seed=seed, dqn_config=dqn,
                checkpoint=resume, demo_episodes=demos,
                bc_episodes=bc_episodes)
@@ -97,7 +103,7 @@ def train_grid(
     from rl_thesis.training.train import run_grid
 
     seed_list = list(range(42, 42 + seeds))
-    run_grid(seeds=seed_list, dqn_config=DQNConfig(), configs=configs or None)
+    run_grid(seeds=seed_list, configs=configs or None)
 
 
 @app.command(name="reward-sweep")

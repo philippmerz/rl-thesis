@@ -33,14 +33,14 @@ def run_reward_sweep(
     gpu_slots: int | None,
     log_dir: Path,
 ) -> int:
-    from rl_thesis.config.config import DQNConfig
+    from rl_thesis.config.config import DQNConfig as _DQNDefaults
 
     config_names = list(configs) if configs else get_config_names()
     tasks = _build_tasks(config_names=config_names, seeds=seeds, start_seed=start_seed)
     if not tasks:
         raise ValueError("No tasks available for the reward sweep.")
 
-    resolved_steps = steps if steps is not None else DQNConfig().total_timesteps
+    resolved_steps = steps if steps is not None else _DQNDefaults().total_timesteps
     visible_gpu_ids = _resolve_gpu_ids(gpu_slots)
     worker_count = _resolve_worker_count(
         requested_workers=workers,
@@ -222,7 +222,7 @@ def _worker_loop(
             os.chdir(REPO_ROOT)
             signal.signal(signal.SIGINT, request_shutdown)
 
-            from rl_thesis.config.config import DQNConfig
+            from rl_thesis.config.reward_configs import make_dqn_config
             from rl_thesis.training.train import run_single
 
             gpu_label = gpu_id if gpu_id is not None else "auto"
@@ -239,10 +239,13 @@ def _worker_loop(
                         flush=True,
                     )
                     try:
+                        dqn = make_dqn_config(
+                            task.config, total_timesteps=steps,
+                        )
                         run_single(
                             config_name=task.config,
                             seed=task.seed,
-                            dqn_config=DQNConfig(total_timesteps=steps),
+                            dqn_config=dqn,
                         )
                     except Exception:
                         print(
