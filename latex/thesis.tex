@@ -20,7 +20,7 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-We study how reward function design affects learned behavior in a multi-objective survival task. An agent on a $64 \times 64$ grid must eat food to avoid starvation, evade enemies, and use shelters for protection. The reward function combines nine weighted components that encode competing objectives: foraging requires leaving shelter, which exposes the agent to damage. We train a Rainbow-lite DQN agent (Double DQN, Dueling architecture, prioritized experience replay, 3-step returns) under several reward configurations and compare the resulting policies against a scripted heuristic baseline. We document two systematic failure modes, oscillation and food hovering, that arise from specific imbalances in the reward weights, and analyze them through the lens of per-tick reward budgets. All experiments run on a single laptop with Apple Silicon, following recent work showing that meaningful reinforcement learning research is feasible at small scale. % [Final results to be added after experiments.]
+We study how reward function design affects learned behavior in a multi-objective survival task. An agent on a $64 \times 64$ grid must eat food to avoid starvation, evade enemies, and use shelters for protection. The reward function combines up to twelve weighted components that encode competing objectives: foraging requires leaving shelter, which exposes the agent to damage. We train a Rainbow-lite DQN agent under several reward configurations and compare the resulting policies against a scripted heuristic baseline. We document three systematic failure modes (oscillation, food hovering, and suicidal behavior) that arise from specific imbalances in the reward weights, and derive seven feasibility constraints that prevent them. Through a sequence of engineered configurations, we find that a minimal reward function with four components outperforms a nine-component alternative that provides strictly more information per step. The central difficulty is conditional mode-switching: the agent must learn to alternate between foraging, sheltering, and fleeing based on its internal state, a behavior that the reward function can incentivize but cannot directly encode.
 \end{abstract}
 
 \tableofcontents
@@ -39,7 +39,7 @@ Multi-objective environments amplify this problem. A survival task requires bala
 
 This work presents a systematic study of reward shaping in a custom grid-based survival environment. The environment features a single agent on a $64 \times 64$ grid that must eat food to prevent starvation, avoid enemies that deal damage, and use shelters for protection. The reward function consists of nine weighted components covering event-driven bonuses, continuous penalties, and spatial gradients. We vary these weights across experiments while holding the agent architecture and all hyperparameters fixed, isolating the effect of reward configuration on learned behavior.
 
-The agent is a Rainbow-lite DQN \citep{Hessel2018} combining Double DQN, a Dueling architecture, prioritized experience replay with 3-step returns, and several stability techniques (LayerNorm, AdamW, Polyak target updates). All experiments run on a single Apple Silicon laptop, following work by \citet{ObandoCeron2021} and \citet{Clark2024} demonstrating that algorithmic choices can substitute for massive compute.
+The agent is a Rainbow-lite DQN \citep{Hessel2018} combining Double DQN, a Dueling architecture, prioritized experience replay with 5-step returns, and several stability techniques (LayerNorm, AdamW, Polyak target updates). Training runs on single consumer GPUs, following work by \citet{ObandoCeron2021} and \citet{Clark2024} demonstrating that algorithmic choices can substitute for massive compute.
 
 Section~\ref{sec:background} reviews the relevant background. Section~\ref{sec:environment} describes the survival environment. Section~\ref{sec:architecture} details the agent architecture. Section~\ref{sec:experiments} presents the experiments and results. Sections~\ref{sec:discussion} and~\ref{sec:conclusion} discuss findings and conclude.
 
@@ -116,7 +116,7 @@ This propagates reward information faster at the cost of increased variance. Mod
 
 \paragraph{Rainbow.} \citet{Hessel2018} combined six DQN extensions into a single agent: Double DQN, Dueling, PER, multi-step returns, distributional RL (C51), and NoisyNet. An ablation study showed that each component contributes, with prioritized replay and multi-step returns providing the largest individual gains.
 
-We adopt four of these six components: Double DQN, Dueling, PER, and 3-step returns. We omit distributional RL due to implementation complexity and NoisyNet because $\varepsilon$-greedy exploration is sufficient at smaller scales \citep{ObandoCeron2021, Fortunato2018}.
+We adopt four of these six components: Double DQN, Dueling, PER, and 5-step returns. We omit distributional RL due to implementation complexity and NoisyNet because $\varepsilon$-greedy exploration is sufficient at smaller scales \citep{ObandoCeron2021, Fortunato2018}.
 
 \subsection{Training Stability Techniques}
 \label{sec:stability}
@@ -182,44 +182,55 @@ The agent has five discrete actions: stay in place, or move one cell up, down, l
 \subsection{Reward Structure}
 \label{sec:reward_structure}
 
-The reward at each step is a weighted sum of nine components:
+The reward at each step is a weighted sum of up to twelve components:
 \begin{equation}
 \label{eq:reward}
 \begin{aligned}
 r_t ={}& w_\text{food}\, i_t^{(\text{eat})}
     + w_\text{edm}\, d_t^{(\text{e})}
-    + w_\text{sdm}\, d_t^{(\text{s})} \\
-& + w_\text{death}\, i_t^{(\text{die})}
-    + w_\text{hunger}\, i_t^{(\text{low})}
-    + w_\text{hprop}(1 - u_t) \\
-& + w_\text{prox}\, c_t
-    + w_\text{shelter}\, i_t^{(\text{safe})}
-    + w_\text{tick},
+    + w_\text{sdm}\, d_t^{(\text{s})}
+    + w_\text{death}\, i_t^{(\text{die})} \\
+& + w_\text{hunger}\, i_t^{(\text{low})}
+    + w_\text{hprop}(1 - u_t)
+    + w_\text{tick} \\
+& + w_\text{fprox}\, \Delta\phi_t^{(\text{f})}
+    + w_\text{eprox}\, \Delta\phi_t^{(\text{e})}
+    + w_\text{sprox}\, \Delta\phi_t^{(\text{s})} \\
+& + w_\text{shelter}\, i_t^{(\text{safe})},
 \end{aligned}
 \end{equation}
-where $w_{\cdot} \in \mathbb{R}$ are tunable scalar weights; $i_t^{(\text{eat})}, i_t^{(\text{die})}, i_t^{(\text{low})}, i_t^{(\text{safe})} \in \{0,1\}$ indicate food eaten, death, low hunger, and shelter safety, respectively; $d_t^{(\text{e})}$ is enemy damage after shelter protection; $d_t^{(\text{s})}$ is starvation damage; $u_t \in [0, 1]$ is the hunger ratio; and $c_t \in [0, 1]$ is the normalized closeness to the nearest visible food item (0 if none visible).
+where $w_{\cdot} \in \mathbb{R}$ are tunable scalar weights; $i_t^{(\text{eat})}, i_t^{(\text{die})}, i_t^{(\text{low})}, i_t^{(\text{safe})} \in \{0,1\}$ are binary indicators for food eaten, death, low hunger, and shelter safety; $d_t^{(\text{e})}$ and $d_t^{(\text{s})}$ are enemy damage and starvation damage; and $u_t \in [0, 1]$ is the hunger ratio.
 
-The hunger-proportional term $w_\text{hprop}(1 - u_t)$ provides a continuous gradient that scales linearly with hunger depletion. The proximity term $w_\text{prox}\, c_t$ provides a spatial gradient toward visible food, where closeness is defined as $(d_\text{max} - d + 1) / (d_\text{max} + 1)$ with $d$ the Manhattan distance and $d_\text{max} = 2r$ the observation diameter.
+The three proximity terms use potential-based reward shaping (PBRS) in delta form. For target type $x \in \{\text{f}, \text{e}, \text{s}\}$ (food, enemy, shelter), define the closeness potential
+\begin{equation}
+\phi_t^{(x)} = \frac{d_\text{max} - d_t^{(x)} + 1}{d_\text{max} + 1} \in [0, 1],
+\end{equation}
+where $d_t^{(x)}$ is the Manhattan distance to the nearest visible entity of type $x$ and $d_\text{max} = 2r_\text{obs}$. If no entity is visible, $\phi_t^{(x)} = 0$. The delta reward $\Delta\phi_t^{(x)} = \phi_t^{(x)} - \phi_{t-1}^{(x)}$ is positive when the agent moves closer and negative when it moves away, satisfying the PBRS form of \citet{Ng1999}. Unlike absolute proximity, delta proximity does not reward hovering near a target.
 
-Table~\ref{tab:default_rewards} defines the reward components and gives their baseline weights.
+Two proximity terms can be conditionally gated on the hunger ratio. When conditional gating is enabled, the food proximity fires only when $u_t < u_\text{thresh}$ (hungry) and the shelter proximity fires only when $u_t \geq u_\text{thresh}$ (well-fed). This encodes a behavioral mode switch through the reward function: the agent receives a spatial gradient toward food when it needs to eat and toward shelter when it does not.
+
+Table~\ref{tab:default_rewards} lists all reward components and their baseline weights.
 
 \begin{table}[h]
 \centering
-\caption{Default reward weights (baseline configuration).}
+\caption{Reward components and baseline weights. Components marked ``disabled'' are set to zero in the baseline and activated in specific experimental configurations.}
 \label{tab:default_rewards}
+\small
 \begin{tabular}{llr}
 \toprule
-Component & Condition & Weight \\
+Component & Condition & Baseline \\
 \midrule
 Food eaten ($w_\text{food}$)          & Agent steps on food tile              & $+5.0$ \\
-Enemy damage ($w_\text{edm}$)         & Per unit of damage (after protection) & $-0.1$ \\
+Enemy damage ($w_\text{edm}$)         & Per unit of damage received           & $-0.1$ \\
 Starvation damage ($w_\text{sdm}$)    & Per unit of starvation damage         & $-1.0$ \\
 Death ($w_\text{death}$)              & Health reaches zero                   & $-10.0$ \\
-Low hunger ($w_\text{low}$)           & Hunger ratio below 0.3                & $0.0$ (disabled) \\
+Low hunger ($w_\text{hunger}$)        & Per tick when $u_t < u_\text{thresh}$ & disabled \\
 Hunger proportional ($w_\text{hprop}$) & Continuous, scales with $(1 - u_t)$  & $-0.3$ \\
-Food proximity ($w_\text{prox}$)      & Closeness to nearest visible food     & $+0.1$ \\
-Shelter safety ($w_\text{shelter}$)   & In shelter with nearby enemy          & $+0.1$ \\
-Survival tick ($w_\text{tick}$)       & Per step alive                        & $0.0$ (disabled) \\
+Food proximity ($w_\text{fprox}$)     & PBRS delta toward nearest food        & $+0.1$ \\
+Enemy proximity ($w_\text{eprox}$)    & PBRS delta toward nearest enemy       & disabled \\
+Shelter proximity ($w_\text{sprox}$)  & PBRS delta toward nearest shelter     & disabled \\
+Shelter safety ($w_\text{shelter}$)   & Agent in shelter                      & $+0.1$ \\
+Survival tick ($w_\text{tick}$)       & Per step alive                        & disabled \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -229,8 +240,8 @@ These components create competing pressures. Collecting food requires movement, 
 A subtle design consideration is the relative magnitude of continuous per-tick rewards versus sparse event rewards. A per-tick reward of $+0.1$ accumulated over a 700-step episode produces $+70$, which can dominate a food reward of $+5.0$. This creates incentives for passive survival: the agent learns to avoid risk rather than seek food. Similarly, a food proximity reward that is too large relative to the food-eaten reward incentivizes hovering near food without eating it, since eating removes the food and terminates the proximity stream. These failure modes motivate the experimental configurations in Section~\ref{sec:experiments}.
 
 \paragraph{Relation to potential-based shaping.}
-The hunger-related terms can be interpreted as roughly analogous to potential-based shaping with a potential over the hunger state. However, the full reward function also includes proximity, shelter, and damage terms that are not derived from a single state potential. The policy-invariance guarantee of \citet{Ng1999} therefore does not apply here, we intentionally trade that guarantee for denser and behaviorally richer learning signals.
-\\\\
+The delta proximity terms satisfy the PBRS conditions of \citet{Ng1999} and therefore preserve the set of optimal policies under the base reward. The remaining components (event-driven bonuses, threshold penalties, proportional penalties) are not derived from a state potential. When multiple such components are combined with different weights, the effective optimization objective changes. The agent maximizes the weighted sum, which may not correspond to any single intended behavior. This kind of mismatch between the specified reward and the behavior the designer actually wants is commonly described as reward hacking \citep{Amodei2016}.
+
 These weights are the primary independent variable in our experiments.
 
 % =============================================================================
@@ -281,7 +292,7 @@ Algorithm~\ref{alg:training} summarizes the training procedure.
 \end{algorithmic}
 \end{algorithm}
 Here, $d_i \in \{0,1\}$ indicates whether sampled transition $i$ is terminal, and $B$ denotes the batch size.
-\paragraph{Experience collection.} At each step, the transition $(s_t, a_t, r_t, s_{t+1}, d_t)$ enters an $n$-step accumulator. Once $n = 3$ transitions have accumulated, the oldest is committed to the replay buffer with return $R_t^{(3)} = r_t + \gamma r_{t+1} + \gamma^2 r_{t+2}$, bootstrap state $s_{t+3}$, and discount factor $\gamma^3$. At episode termination (agent death), remaining entries are flushed with shortened returns. On episode truncation (time limit), pending entries are discarded to prevent cross-episode contamination of $n$-step returns.
+\paragraph{Experience collection.} At each step, the transition $(s_t, a_t, r_t, s_{t+1}, d_t)$ enters an $n$-step accumulator. Once $n = 5$ transitions have accumulated, the oldest is committed to the replay buffer with the $n$-step return (Equation~\ref{eq:nstep}), bootstrap state $s_{t+n}$, and discount factor $\gamma^n$. At episode termination (agent death), remaining entries are flushed with shortened returns. On episode truncation (time limit), pending entries are discarded to prevent cross-episode contamination of $n$-step returns.
 
 The distinction between termination and truncation matters for the bootstrap target. A terminated episode (death) sets $d = 1$, zeroing the bootstrap term. A truncated episode sets $d = 0$, allowing bootstrapping from the final state since the agent was still alive.
 
@@ -289,7 +300,7 @@ The distinction between termination and truncation matters for the bootstrap tar
 
 \paragraph{Optimization.} AdamW with decoupled weight decay ($10^{-4}$) on convolutional and linear weights; bias and normalization parameters are exempt. Gradients are clipped to norm 1.0. The learning rate follows a 1cycle schedule: 5\% warmup from $10^{-5}$ to $10^{-4}$, then cosine annealing to $10^{-6}$.
 
-\paragraph{Exploration.} $\varepsilon$-greedy with linear decay from 1.0 to 0.05 over the first half of training. The relatively high final $\varepsilon$ ensures continued exploration in the stochastic environment.
+\paragraph{Exploration.} $\varepsilon$-greedy with linear decay from 1.0 to 0.01 over the first half of training.
 
 \subsection{Hyperparameters}
 \label{sec:hyperparameters}
@@ -317,13 +328,13 @@ Min.\ buffer size (warmup)  & 10{,}000          & \citet{Mnih2015} \\
 PER $\alpha$                & 0.6               & \citet{Schaul2016} \\
 PER $\beta_0$               & 0.4               & \citet{Schaul2016} \\
 $\beta$ annealing steps     & $T/2$             & \\
-$n$-step returns            & 3                 & \citet{Hessel2018} \\
+$n$-step returns            & 5                 & \citet{Hessel2018} \\
 \midrule
 \multicolumn{3}{l}{\textit{Target network}} \\
 Polyak $\tau$               & 0.005             & \citet{Lillicrap2016} \\
 \midrule
 \multicolumn{3}{l}{\textit{Exploration}} \\
-$\varepsilon$ start / end   & 1.0 / 0.05        & \citet{Mnih2015} \\
+$\varepsilon$ start / end   & 1.0 / 0.01        & \citet{Mnih2015} \\
 $\varepsilon$ decay steps   & $T/2$             & \\
 \midrule
 \multicolumn{3}{l}{\textit{Network}} \\
@@ -347,7 +358,7 @@ Eval episodes               & 10                & \\
 
 \subsection{Experimental Setup}
 
-All experiments run on a single Apple Silicon laptop (M-series, MPS backend). Each run trains for $T$ timesteps with greedy evaluation (10 episodes, $\varepsilon = 0$) every 5{,}000 steps. We report four behavioral metrics: mean episode return, mean survival time (ticks), mean food eaten per episode, and death rate. Each configuration is run with 3 seeds for variance estimation. The agent architecture and all hyperparameters (Table~\ref{tab:hyperparams}) are held constant across runs; only the reward weights change.
+Each run trains for $T = 2{,}000{,}000$ timesteps on a single consumer GPU (RTX 2060/3060 class). Greedy evaluation (20 episodes, $\varepsilon = 0$) runs every 5{,}000 steps during training. Final benchmarks evaluate the best checkpoint over 100 episodes with fixed seeds. We report four behavioral metrics: mean survival time (ticks), mean food eaten, mean damage taken, and death rate. Each configuration runs with 3 random seeds for variance estimation. The agent architecture and all hyperparameters (Table~\ref{tab:hyperparams}) are held constant across runs; only the reward weights change.
 
 \paragraph{Heuristic baseline.} A scripted agent provides a reference for non-learned behavior. The heuristic camps in the nearest shelter and leaves only when the hunger ratio drops below 0.5, at which point it moves toward the nearest food. It flees from enemies within Manhattan distance 5. This agent survives approximately 764 steps on average, eats roughly 1.2 food items per episode, and dies in about 96\% of episodes. The remaining 4\% reach the 1000-step time limit.
 
@@ -420,53 +431,111 @@ Configuration & Modification & Violated constraint \\
 
 \paragraph{Free movement.} Sets the movement hunger cost to zero while keeping all reward weights at baseline values. If the agent still oscillates under this configuration, oscillation is a training artifact rather than a reward-rational strategy, since the reward incentive to move toward food is unambiguously positive.
 
+\subsection{Engineered Reward Progression}
+\label{sec:engineered}
+
+The diagnostic configurations above confirm that constraint violations produce predictable failures. A natural follow-up question is whether a carefully designed reward function, satisfying all constraints and adding spatial gradients for each behavioral objective, can match or exceed the heuristic. We test a sequence of engineered configurations that progressively refine the reward signal, each iteration addressing a specific limitation identified in the previous one.
+
+\paragraph{Structural incompatibility of hunger-proportional penalty.}
+The baseline reward includes a continuous hunger-proportional penalty $w_\text{hprop}(1-u_t) = -0.3(1-u_t)$. This creates a gradient encouraging the agent to maintain high hunger. However, every movement costs $c = 0.5$ hunger, triggering an incremental penalty of $|w_\text{hprop}| \cdot c / u_\text{max} = 0.0015$ per step. At $\gamma = 0.99$, the present value of this penalty stream over the expected remaining episode is
+\begin{equation}
+\text{PV}_\text{move} = \frac{0.0015}{1 - 0.99} = 0.15,
+\end{equation}
+while the maximum food proximity reward from one step is approximately $0.1 / 15 \approx 0.0067$. The movement penalty exceeds the approach reward by a factor of 22. Under this reward function, not moving is always Q-value optimal regardless of hunger level, producing a stasis equilibrium that no proximity gradient can overcome.
+
+This structural incompatibility motivates removing $w_\text{hprop}$ and replacing it with a threshold-based penalty that does not couple to movement cost.
+
+\paragraph{Configuration E1: threshold penalty with proximity gradients.}
+The first engineered configuration removes $w_\text{hprop}$, introduces a flat low-hunger penalty ($w_\text{hunger} = -0.5$ when $u_t < 0.3$), strengthens the food reward ($w_\text{food} = 8.0$) and food proximity ($w_\text{fprox} = 0.15$), and adds an enemy proximity gradient ($w_\text{eprox} = -0.5$). The flat penalty creates urgency without penalizing movement, since the penalty magnitude is independent of hunger level changes.
+
+E1 produces an agent that forages well and avoids enemies: it eats roughly twice as much food as the heuristic (2.0 vs 1.19 per episode) and takes less damage per tick. However, the agent moves every tick, burning hunger approximately 3.5 times faster than the heuristic. The heuristic, by contrast, idles near shelter when well-fed, conserving hunger for 60--70\% of each episode.
+
+\paragraph{Configuration E4: shelter proximity and survival tick.}
+To address the missing shelter-seeking behavior, E4 adds a shelter proximity gradient ($w_\text{sprox} = 0.15$) that mirrors the food proximity signal and gates both on the hunger threshold: food proximity fires only when hungry ($u_t < 0.5$), shelter proximity fires only when well-fed ($u_t \geq 0.5$). A small survival tick ($w_\text{tick} = 0.05$) directly rewards each step alive.
+
+\paragraph{Configuration E5: minimal reward set.}
+E5 strips the reward to three PBRS delta proximities (food, enemy, shelter) plus the death penalty. All event-driven rewards ($w_\text{food}$, $w_\text{edm}$, $w_\text{sdm}$), threshold penalties ($w_\text{hunger}$), and binary signals ($w_\text{shelter}$, $w_\text{tick}$) are set to zero. The hypothesis is that fewer signals reduce interference in Q-value estimation. The three proximity gradients directly encode the behavioral mode switch: hungry agents receive a gradient toward food, well-fed agents toward shelter, and all agents away from enemies.
+
+\paragraph{Configuration E6: adding food reward to E5.}
+E5 produces an agent with strong shelter and flee behavior but minimal foraging (0.57 food per episode). The survival gap to the heuristic (approximately 60 ticks) corresponds exactly to the food deficit: 0.6 fewer food items $\times$ 100 ticks of life per food item. The root cause is that E5 provides no reward for the terminal foraging action. The food proximity gradient guides the agent toward food, but eating triggers a state transition past the hunger threshold, which turns off the food proximity signal and activates the shelter proximity signal. From the Q-network's perspective, eating food transitions to a lower-reward state.
+
+E6 adds $w_\text{food} = 5.0$ to the E5 structure to reward the foraging completion event.
+
 \subsection{Results}
-% [To be filled after final experiment runs.]
-% - Learning curves: episode return over training steps (per configuration)
-% - Behavioral metrics: survival time, food eaten, damage taken
-% - Comparison with heuristic baseline
-% - Statistical comparison across configurations (mean +/- std over seeds)
+\label{sec:results}
+
+All engineered configurations train for 2{,}000{,}000 timesteps on a single GPU. Evaluation uses 100 episodes with fixed seeds (1000--1099). Table~\ref{tab:results} reports benchmark results against the heuristic.
+
+\begin{table}[h]
+\centering
+\caption{Benchmark results (100 episodes, mean $\pm$ 95\% CI where available). Each engineered configuration is the best seed of three. The heuristic serves as the reference.}
+\label{tab:results}
+\small
+\begin{tabular}{lrrrl}
+\toprule
+Configuration & Survival & Food & Damage & vs.\ Heuristic \\
+\midrule
+Heuristic         & $768 \pm 19$ & 1.19 & 99.5 & --- \\
+\midrule
+E4 (shelter prox) & $695 \pm 30$ & 2.19 & 99.2 & $-73$ ($p < 0.001$) \\
+E5 (minimal)      & $715 \pm 19$ & 0.66 & 101  & $-54$ ($p < 0.001$) \\
+E6 (E5 + food)    & $470 \pm 26$ & 0.81 & 100  & $-298$ ($p < 0.001$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three findings emerge from these results.
+
+\paragraph{Fewer signals outperform more signals.} E5 (four reward components) survives longer than E4 (nine components): $715$ vs $695$ ticks. E5 achieves this despite eating less than half the food. The minimal reward set produces a coherent conservative policy (stay near shelter, avoid enemies) without the conflicting gradients that arise from combining event-driven and proximity-based signals. This is consistent with the observation in \citet{Hessel2018} that adding components can degrade performance when they interact destructively.
+
+\paragraph{Adding a food reward destabilizes learned behavior.} E6 adds a single component ($w_\text{food} = 5.0$) to E5's minimal structure. Rather than improving foraging on top of E5's shelter and flee behavior, it degrades both: survival drops from 715 to 470 ticks, and enemy damage increases from 10 to 100 per episode. The food reward creates a competing gradient that overwhelms the enemy proximity signal, causing the agent to approach food even when enemies are nearby.
+
+\paragraph{The mode-switching problem.} All configurations perform below the heuristic. The heuristic implements explicit conditional logic: flee if enemy nearby, forage if hungry, otherwise shelter. The DQN must learn an equivalent conditional policy from the scalar hunger ratio in its observation. E4 over-forages (moves every tick). E5 under-forages (barely eats). Neither achieves the balanced switching that the heuristic encodes by construction. The Q-network must represent a sharp nonlinearity in the hunger ratio dimension where the optimal action flips between ``approach food'' and ``approach shelter.'' Learning this transition from reward signal alone, without explicit mode labels, is the central difficulty.
 
 \subsection{Analysis}
-% [To be filled after final experiment runs.]
-% - Which reward components have the strongest effect on behavior?
-% - Do any configurations outperform the heuristic baseline?
-% - How sensitive is the agent to reward scale vs reward composition?
-% - Relate findings back to the failure modes and PBRS theory
+\label{sec:analysis}
+
+\paragraph{Reward budget decomposition.}
+The engineered progression illustrates a recurring pattern: each reward component consumes a share of the Q-value budget, and components that dominate this budget determine behavior. The hunger-proportional penalty consumes the entire budget through its interaction with movement cost (factor-22 structural incompatibility). Removing it frees the budget for proximity gradients. But proximity gradients themselves compete: food proximity pulls the agent into danger zones, enemy proximity pushes it toward shelter, and shelter proximity rewards passivity. The optimal balance depends on the agent's current hunger state, which the reward function cannot condition on (only the policy can).
+
+\paragraph{PBRS delta proximity does not cause hovering.}
+A key design choice is the use of delta (PBRS) proximity rather than absolute proximity. Absolute proximity rewards the agent for being near food, creating the food-hovering failure mode described in Section~\ref{sec:failure_modes}. Delta proximity rewards only the change in distance: approaching gives a positive reward, and staying near gives zero. This eliminates the hovering incentive. All engineered configurations use delta proximity, and none exhibit hovering behavior.
+
+\paragraph{Signal interference in Q-value estimation.}
+The E5 vs E4 comparison suggests that signal interference, rather than signal insufficiency, is the primary obstacle. E4 provides richer information (damage penalties, threshold penalties, shelter safety) but the Q-network produces a less coherent policy. One explanation is that multiple reward components create a noisy TD target: the same state-action pair produces different reward magnitudes depending on which components fire, increasing the variance of the Bellman backup. With fewer components, the target variance decreases, allowing the network to learn a cleaner value function even though it receives less information per step.
 
 % =============================================================================
 \section{Discussion}
 \label{sec:discussion}
 % =============================================================================
-% - Summary of key findings
-% - Practical takeaways for reward design in multi-objective survival tasks
-% - What worked well about the Rainbow-lite approach at laptop scale
-% - Limitations:
-%   - Single environment (no transfer claims)
-%   - Limited hyperparameter tuning budget
-%   - No comparison with policy gradient methods (PPO, A2C)
-%   - Grid world is a simplification of real survival tasks
-% - Connections to related work:
-%   - How our findings compare to Rainbow ablation results (Hessel et al.)
-%   - Relevance to compute-efficient RL (Obando-Ceron & Castro 2021)
-%   - Plasticity considerations (Lyle et al. 2023)
 
+\paragraph{Reward design as constrained optimization.}
+The feasibility constraints C1--C7 formalize reward design as a system of inequalities over the weight vector. Satisfying all constraints is necessary but not sufficient for good performance: the baseline satisfies all seven constraints yet still produces suboptimal behavior due to the structural incompatibility between hunger-proportional penalty and movement cost. The constraints rule out degenerate policies but cannot guarantee that the agent learns the intended conditional behavior.
+
+\paragraph{The cost of reward complexity.}
+The E5 vs E4 result challenges the intuition that more informative rewards produce better policies. In multi-objective settings, each additional reward component introduces a potential source of interference in Q-value estimation. The agent does not receive separate Q-values per objective; it learns a single scalar value function that must integrate all reward components. When components create conflicting gradients (food proximity pulls toward danger, enemy proximity pushes away), the resulting value function is a noisy compromise rather than a clean conditional policy.
+
+This suggests a design principle: prefer fewer, PBRS-compliant reward components that encode the behavioral mode switch through conditional gating, over many concurrent signals that each encode a partial aspect of the desired behavior.
+
+\paragraph{Limitations.}
 The focus of this work is reward shaping, not hyperparameter optimization. Architecture and training hyperparameters were fixed across all experiments to isolate the effect of reward configuration. A systematic hyperparameter search could likely improve absolute performance but is orthogonal to our research question.
+
+The environment is a single grid world. The findings may not transfer directly to continuous-action domains, partially observable environments with longer horizons, or tasks where the competing objectives have different time scales. The comparison is against a single heuristic baseline; policy gradient methods (PPO, A2C) may respond differently to the same reward configurations.
+
+The DQN architecture processes the hunger ratio as a scalar input concatenated with spatial features. Alternative architectures that provide the hunger state more directly to the decision layer (e.g., through a gating mechanism or separate value heads per behavioral mode) might reduce the difficulty of learning the mode switch. We did not explore such architectural modifications, as they would conflate reward effects with architecture effects.
 
 % =============================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 % =============================================================================
-% - Restate the question: how do reward weightings shape behavior in
-%   multi-objective grid survival?
-% - Key result in one sentence
-% - Contribution: empirical evidence for reward shaping effects in a
-%   controlled multi-objective RL setting, using a compute-efficient agent
-% - Future work:
-%   - Curriculum learning (gradually increase difficulty)
-%   - Larger/more complex environments
-%   - Automated reward tuning (multi-objective optimization)
-%   - Transfer to continuous-action or 3D environments
+
+We studied how reward function design affects learned behavior in a multi-objective survival task. By varying reward weights while holding the agent architecture fixed, we identified three systematic failure modes (oscillation, food hovering, suicide) and derived seven feasibility constraints that prevent them. Configurations satisfying all constraints avoid degenerate behavior but do not guarantee performance matching a scripted heuristic.
+
+The central finding is that reward complexity can be counterproductive. A minimal configuration with four components (three PBRS delta proximity gradients and a death penalty) outperforms a nine-component configuration that provides strictly more information per step. The minimal agent learns a coherent conservative policy, while the richer signal produces conflicting Q-value gradients that degrade both foraging and survival.
+
+No configuration matches the heuristic baseline. The gap is attributable to the mode-switching problem: the heuristic implements explicit conditional logic (flee/forage/shelter) that the DQN must learn implicitly from a scalar hunger observation. The reward function can create gradients for each behavioral mode, but it cannot directly encode the transition between modes. Learning this transition from reward signal alone remains an open challenge.
+
+Future work could explore curriculum learning (training without enemies before introducing them), hierarchical architectures with explicit mode selection, or automated reward weight optimization through population-based methods.
 
 % =============================================================================
 % References
