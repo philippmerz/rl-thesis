@@ -284,6 +284,66 @@ REWARD_CONFIGS: Dict[str, Dict[str, Any]] = {
         "_dqn": {"n_step": 10},
     },
 
+    # Engineered v7: calibrated food + damage on V5 structure.
+    #
+    # V6 showed that food_eaten=5.0 destabilized V5's shelter/flee
+    # behavior (464 vs 710 survival). The large food reward overwhelmed
+    # the enemy proximity gradient, causing the agent to trade safety
+    # for food. V7 uses a smaller food_eaten (2.0) and reintroduces a
+    # moderate damage penalty (-0.3) to maintain the flee incentive.
+    "engineered_v7": {
+        "reward_food_eaten": 2.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": -0.3,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+    },
+
+    # V7 curriculum phase 1: no enemies.
+    # Trains foraging and shelter cycling in isolation. Enemy channels
+    # in the observation are present but empty (all zeros).
+    "engineered_v7_cur_p1": {
+        "reward_food_eaten": 2.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": -0.3,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "max_enemy_density": 0.0,
+        "initial_enemy_fraction": 0.0,
+        "enemy_spawn_rate": 0.0,
+    },
+
+    # V7 curriculum phase 2: full environment with warm-started weights.
+    # Same rewards as V7; separate config name for distinct output directory.
+    "engineered_v7_cur": {
+        "reward_food_eaten": 2.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": -0.3,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+    },
+
     # Engineered v5: minimal reward set.
     #
     # Only three proximity gradients + death. No food_eaten, no

@@ -357,24 +357,30 @@ class DQNAgent:
     def load(self, path: str) -> None:
         """
         Load agent state from disk.
-        
+
         Args:
             path: Path to checkpoint file
         """
         checkpoint = torch.load(path, map_location=self.device, weights_only=False)
-        
+
         self.policy_net.load_state_dict(checkpoint['policy_net'])
         self.target_net.load_state_dict(checkpoint['target_net'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
-        
+
         # Load scheduler if present (for backward compatibility)
         if 'lr_scheduler' in checkpoint:
             self.lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-        
+
         self.steps_done = checkpoint['steps_done']
         self.updates_done = checkpoint['updates_done']
         self.epsilon = checkpoint['epsilon']
-    
+
+    def load_weights(self, path: str) -> None:
+        """Load only network weights from a checkpoint (fresh optimizer/epsilon/counters)."""
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+        self.policy_net.load_state_dict(checkpoint['policy_net'])
+        self.target_net.load_state_dict(checkpoint['target_net'])
+
     def pretrain_behavioral_cloning(
         self,
         states: np.ndarray,

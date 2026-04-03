@@ -21,11 +21,14 @@ def _format_time(seconds: float) -> str:
 
 def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
                checkpoint: str | None = None,
+               warm_start: str | None = None,
                demo_episodes: int = 0,
                bc_episodes: int = 0) -> None:
     """Train a single (config, seed) combination.
 
     If *checkpoint* is provided, training resumes from that file.
+    If *warm_start* is provided, only network weights are loaded (fresh
+    optimizer, epsilon, and counters).
     """
     run_dir = Path("runs") / config_name / f"seed_{seed}"
     dqn = replace(
@@ -34,7 +37,8 @@ def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
         log_dir=run_dir / "logs",
     )
     world_config = make_world_config(config_name, seed=seed)
-    trainer = Trainer(world_config, dqn, checkpoint_path=checkpoint)
+    trainer = Trainer(world_config, dqn, checkpoint_path=checkpoint,
+                      warm_start_path=warm_start)
 
     weights = describe_config(config_name)
     print("=" * 60)
@@ -42,6 +46,8 @@ def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
     print(f"Output: {run_dir}")
     if checkpoint:
         print(f"Resume: {checkpoint}")
+    if warm_start:
+        print(f"Warm start: {warm_start}")
     print("-" * 60)
     for k, v in weights.items():
         print(f"  {k}: {v}")

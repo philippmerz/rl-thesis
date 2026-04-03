@@ -43,6 +43,10 @@ def train(
         None, "--resume", "-r",
         help="Path to checkpoint to resume from",
     ),
+    warm_start: str = typer.Option(
+        None, "--warm-start",
+        help="Path to checkpoint for weight initialization only (fresh optimizer/schedule/epsilon)",
+    ),
     steps: int = typer.Option(
         None, "--steps",
         help="Override total timesteps (default from DQNConfig)",
@@ -87,8 +91,8 @@ def train(
     }
     dqn = make_dqn_config(config, **cli_overrides)
     run_single(config_name=config, seed=seed, dqn_config=dqn,
-               checkpoint=resume, demo_episodes=demos,
-               bc_episodes=bc_episodes)
+               checkpoint=resume, warm_start=warm_start,
+               demo_episodes=demos, bc_episodes=bc_episodes)
 
 
 @app.command(name="train-grid")

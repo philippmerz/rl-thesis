@@ -24,7 +24,11 @@ if TYPE_CHECKING:
 
 class Trainer:
     def __init__(self, world_config: WorldConfig, dqn_config: DQNConfig,
-                 checkpoint_path: Optional[str] = None):
+                 checkpoint_path: Optional[str] = None,
+                 warm_start_path: Optional[str] = None):
+        assert not (checkpoint_path and warm_start_path), \
+            "checkpoint_path and warm_start_path are mutually exclusive"
+
         self.world_config = world_config
         self.dqn_config = dqn_config
 
@@ -49,6 +53,10 @@ class Trainer:
         if checkpoint_path:
             self.agent.load(checkpoint_path)
             print(f"Resumed from {checkpoint_path} (step {self.agent.steps_done:,})")
+
+        if warm_start_path:
+            self.agent.load_weights(warm_start_path)
+            print(f"Warm-started weights from {warm_start_path}")
 
         self.on_episode_end: Optional[Callable[[int, Dict], None]] = None
         self.on_checkpoint: Optional[Callable[[int, str], None]] = None
