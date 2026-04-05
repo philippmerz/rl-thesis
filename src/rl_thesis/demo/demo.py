@@ -19,6 +19,7 @@ def run_demo(
 ):
     if checkpoint_path is not None:
         from rl_thesis.agent.dqn import DQNAgent
+        from rl_thesis.environment.frame_stack import FrameStackEnv
 
         dqn_agent = DQNAgent.from_checkpoint(checkpoint_path)
         agent_label = f"DQN Agent (checkpoint: {checkpoint_path})"
@@ -34,6 +35,11 @@ def run_demo(
         )
 
     env = SurvivalEnv(world_config)
+
+    if dqn_agent is not None:
+        frame_stack = getattr(dqn_agent.config, 'frame_stack', 1)
+        if frame_stack > 1:
+            env = FrameStackEnv(env, frame_stack)
 
     renderer = create_renderer(
         config=vis_config,

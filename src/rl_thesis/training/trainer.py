@@ -13,6 +13,7 @@ import numpy as np
 from tqdm import tqdm
 
 from rl_thesis.environment.gym_env import SurvivalEnv
+from rl_thesis.environment.frame_stack import FrameStackEnv
 from rl_thesis.agent.dqn import DQNAgent
 from rl_thesis.agent.human_heuristic import HumanHeuristicAgent
 from rl_thesis.config.config import HumanHeuristicConfig
@@ -38,15 +39,16 @@ class Trainer:
         self.log_dir = dqn_config.log_dir
         self.metrics = MetricsLogger(self.log_dir)
 
-        self.env = SurvivalEnv(world_config)
+        self.env = self._make_env(world_config, dqn_config)
 
+        spatial_channels = world_config.num_spatial_channels * dqn_config.frame_stack
         self.agent = DQNAgent(
             observation_size=self.env.observation_size,
             action_size=self.env.action_size,
             config=dqn_config,
             grid_h=world_config.observation_grid_size,
             grid_w=world_config.observation_grid_size,
-            spatial_channels=world_config.num_spatial_channels,
+            spatial_channels=spatial_channels,
             scalar_dim=world_config.num_scalars,
         )
 
@@ -58,11 +60,20 @@ class Trainer:
             self.agent.load_weights(warm_start_path)
             print(f"Warm-started weights from {warm_start_path}")
 
+        self._frame_stack = dqn_config.frame_stack
+
         self.on_episode_end: Optional[Callable[[int, Dict], None]] = None
         self.on_checkpoint: Optional[Callable[[int, str], None]] = None
         self._latest_checkpoint_step = self._discover_latest_checkpoint_step()
         self._best_eval_survival = -float('inf')
         self._show_progress = sys.stdout.isatty()
+
+    @staticmethod
+    def _make_env(world_config: WorldConfig, dqn_config: DQNConfig):
+        env = SurvivalEnv(world_config)
+        if dqn_config.frame_stack > 1:
+            env = FrameStackEnv(env, dqn_config.frame_stack)
+        return env
 
     def pretrain_behavioral_cloning(
         self,
@@ -74,7 +85,7 @@ class Trainer:
 
         Returns per-epoch BC losses.
         """
-        demo_env = SurvivalEnv(self.world_config)
+        demo_env = self._make_env(self.world_config, self.dqn_config)
         heuristic = HumanHeuristicAgent(
             hunger_threshold=HumanHeuristicConfig.hunger_threshold,
             flee_radius=HumanHeuristicConfig.flee_radius,
@@ -111,7 +122,7 @@ class Trainer:
 
         Returns the number of transitions added.
         """
-        demo_env = SurvivalEnv(self.world_config)
+        demo_env = self._make_env(self.world_config, self.dqn_config)
         heuristic = HumanHeuristicAgent(
             hunger_threshold=HumanHeuristicConfig.hunger_threshold,
             flee_radius=HumanHeuristicConfig.flee_radius,
@@ -272,7 +283,7 @@ class Trainer:
         callback: Optional[Callable] = None,
     ) -> Dict[str, float]:
         """Run greedy evaluation episodes and return aggregate metrics."""
-        eval_env = SurvivalEnv(self.world_config)
+        eval_env = self._make_env(self.world_config, self.dqn_config)
 
         rewards = []
         survivals = []

@@ -142,6 +142,7 @@ class DQNConfig:
     batch_size: int = 128
     weight_decay: float = 1e-4
     n_step: int = 5                       # Multi-step returns horizon
+    frame_stack: int = 1                   # Stacked observation frames (1 = no stacking)
 
     # Replay buffer
     buffer_size: int = 500_000
