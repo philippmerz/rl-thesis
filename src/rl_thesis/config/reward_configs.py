@@ -366,6 +366,36 @@ REWARD_CONFIGS: Dict[str, Dict[str, Any]] = {
         "reward_survival_tick": 0.0,
     },
 
+    # V5 with extended training and tuned DQN hyperparameters.
+    #
+    # V5 seed 42 peaked at 766.9 survival (step 1.56M) before
+    # oscillating, suggesting the policy hadn't fully stabilized.
+    # Changes from default DQN config:
+    #   - 5M steps: 2.5x more training to let the policy converge
+    #   - epsilon_decay 1M: proportionally longer exploration phase
+    #   - buffer 1M: retain more diverse experience over 5M steps
+    #   - tau 0.002: slower target updates for stability
+    "engineered_v5_long": {
+        "reward_food_eaten": 0.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "_dqn": {
+            "total_timesteps": 5_000_000,
+            "epsilon_decay_steps": 1_000_000,
+            "buffer_size": 1_000_000,
+            "tau": 0.002,
+        },
+    },
+
     "engineered_v4": {
         "reward_hunger_proportional": 0.0,
         "reward_low_hunger": -0.5,
