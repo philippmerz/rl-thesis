@@ -20,7 +20,7 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-We study how reward function design affects learned behavior in a multi-objective survival task. An agent on a $64 \times 64$ grid must eat food to avoid starvation, evade enemies, and use shelters for protection. The reward function combines up to twelve weighted components that encode competing objectives: foraging requires leaving shelter, which exposes the agent to damage. We train a Rainbow-lite DQN agent under several reward configurations and compare the resulting policies against a scripted heuristic baseline. We document three systematic failure modes (oscillation, food hovering, and suicidal behavior) that arise from specific imbalances in the reward weights, and derive seven feasibility constraints that prevent them. Through a sequence of engineered configurations, we find that a minimal reward function with four components outperforms a nine-component alternative that provides strictly more information per step. The central difficulty is conditional mode-switching: the agent must learn to alternate between foraging, sheltering, and fleeing based on its internal state, a behavior that the reward function can incentivize but cannot directly encode.
+We study how reward function design affects learned behavior in a multi-objective survival task. An agent on a $64 \times 64$ grid must eat food to avoid starvation, evade enemies, and use shelters for protection. The reward function combines up to twelve weighted components that encode competing objectives: foraging requires leaving shelter, which exposes the agent to damage. We train a Rainbow-lite DQN agent under several reward configurations and compare against a scripted heuristic baseline. Three systematic failure modes (oscillation, food hovering, suicide) arise from specific imbalances in the reward weights; we derive seven feasibility constraints that prevent them. Across all configurations tested, a minimal reward function with four components (three conditional proximity gradients and a death penalty) outperforms richer alternatives with up to nine signals. Adding any explicit food reward to this minimal set destabilizes the learned shelter and flee behavior, even at small magnitudes. Episode-level analysis reveals a cold start problem: the best agent forages in roughly half its episodes and matches the heuristic when it does, but defaults to passive sheltering otherwise. The core difficulty is conditional mode-switching, a behavior that the reward function can incentivize but cannot encode directly.
 \end{abstract}
 
 \tableofcontents
@@ -37,7 +37,7 @@ Reinforcement learning (RL) has produced agents that match or exceed human perfo
 
 Multi-objective environments amplify this problem. A survival task requires balancing resource gathering, which demands exploration, against threat avoidance, which favors conservative behavior. The reward function must encode the relative importance of these objectives. There is no single ``correct'' weighting, instead, the choice reflects a design decision about what behavior is desirable.
 
-This work presents a systematic study of reward shaping in a custom grid-based survival environment. The environment features a single agent on a $64 \times 64$ grid that must eat food to prevent starvation, avoid enemies that deal damage, and use shelters for protection. The reward function consists of nine weighted components covering event-driven bonuses, continuous penalties, and spatial gradients. We vary these weights across experiments while holding the agent architecture and all hyperparameters fixed, isolating the effect of reward configuration on learned behavior.
+This work presents a systematic study of reward shaping in a custom grid-based survival environment. The environment features a single agent on a $64 \times 64$ grid that must eat food to prevent starvation, avoid enemies that deal damage, and use shelters for protection. The reward function consists of up to twelve weighted components covering event-driven bonuses, continuous penalties, and spatial gradients. We vary these weights across experiments while holding the agent architecture fixed, isolating the effect of reward configuration on learned behavior.
 
 The agent is a Rainbow-lite DQN \citep{Hessel2018} combining Double DQN, a Dueling architecture, prioritized experience replay with 5-step returns, and several stability techniques (LayerNorm, AdamW, Polyak target updates). Training runs on single consumer GPUs, following work by \citet{ObandoCeron2021} and \citet{Clark2024} demonstrating that algorithmic choices can substitute for massive compute.
 
@@ -358,9 +358,9 @@ Eval episodes               & 10                & \\
 
 \subsection{Experimental Setup}
 
-Each run trains for $T = 2{,}000{,}000$ timesteps on a single consumer GPU (RTX 2060/3060 class). Greedy evaluation (20 episodes, $\varepsilon = 0$) runs every 5{,}000 steps during training. Final benchmarks evaluate the best checkpoint over 100 episodes with fixed seeds. We report four behavioral metrics: mean survival time (ticks), mean food eaten, mean damage taken, and death rate. Each configuration runs with 3 random seeds for variance estimation. The agent architecture and all hyperparameters (Table~\ref{tab:hyperparams}) are held constant across runs; only the reward weights change.
+Each configuration trains for $T = 2{,}000{,}000$ timesteps on a single consumer GPU (RTX 3060/4070 class). Greedy evaluation (20 episodes, $\varepsilon = 0$) runs every 5{,}000 steps during training. Final benchmarks evaluate the best checkpoint over 100 episodes with fixed seeds (1000--1099). We report four behavioral metrics: mean survival time (ticks), mean food eaten, mean damage taken, and death rate. Each configuration runs with 3 random seeds for variance estimation. The agent architecture and all hyperparameters (Table~\ref{tab:hyperparams}) are held constant across reward shaping experiments.
 
-\paragraph{Heuristic baseline.} A scripted agent provides a reference for non-learned behavior. The heuristic camps in the nearest shelter and leaves only when the hunger ratio drops below 0.5, at which point it moves toward the nearest food. It flees from enemies within Manhattan distance 5. This agent survives approximately 764 steps on average, eats roughly 1.2 food items per episode, and dies in about 96\% of episodes. The remaining 4\% reach the 1000-step time limit.
+\paragraph{Heuristic baseline.} A scripted agent provides a reference for non-learned behavior. The heuristic camps in the nearest shelter and leaves only when the hunger ratio drops below 0.5, at which point it moves toward the nearest food. It flees from enemies within Manhattan distance 5. Over 100 evaluation episodes, this agent survives 768 steps on average, eats 1.19 food items per episode, and dies in 95\% of episodes. The remaining 5\% reach the 1000-step time limit.
 
 \subsection{Failure Modes}
 \label{sec:failure_modes}
@@ -401,7 +401,7 @@ Let $D = 2 r_\text{obs}$ denote the observation diameter. The constraints are:
 
 Each failure mode in Section~\ref{sec:failure_modes} maps to a specific constraint violation: oscillation to C3, food hovering to C2, and suicide to C1.
 
-Table~\ref{tab:reward_configs} defines three reward configurations. The \textsc{baseline} satisfies all constraints. The two diagnostic configurations each violate a specific constraint to confirm the predicted failure mode.
+Table~\ref{tab:reward_configs} defines the diagnostic configurations. The \textsc{baseline} satisfies all constraints. Each diagnostic configuration violates a specific constraint or tests a limiting case.
 
 \begin{table}[h]
 \centering
@@ -431,78 +431,103 @@ Configuration & Modification & Violated constraint \\
 
 \paragraph{Free movement.} Sets the movement hunger cost to zero while keeping all reward weights at baseline values. If the agent still oscillates under this configuration, oscillation is a training artifact rather than a reward-rational strategy, since the reward incentive to move toward food is unambiguously positive.
 
-\subsection{Engineered Reward Progression}
+\subsection{Reward Engineering}
 \label{sec:engineered}
 
-The diagnostic configurations above confirm that constraint violations produce predictable failures. A natural follow-up question is whether a carefully designed reward function, satisfying all constraints and adding spatial gradients for each behavioral objective, can match or exceed the heuristic. We test a sequence of engineered configurations that progressively refine the reward signal, each iteration addressing a specific limitation identified in the previous one.
+The diagnostic configurations confirm that constraint violations produce predictable failures. The next question is whether a carefully designed reward function can match the heuristic. The design process identified two key insights: a structural incompatibility in the baseline, and the counterproductive effect of reward complexity.
 
-\paragraph{Structural incompatibility of hunger-proportional penalty.}
-The baseline reward includes a continuous hunger-proportional penalty $w_\text{hprop}(1-u_t) = -0.3(1-u_t)$. This creates a gradient encouraging the agent to maintain high hunger. However, every movement costs $c = 0.5$ hunger, triggering an incremental penalty of $|w_\text{hprop}| \cdot c / u_\text{max} = 0.0015$ per step. At $\gamma = 0.99$, the present value of this penalty stream over the expected remaining episode is
+\paragraph{Structural incompatibility of the hunger-proportional penalty.}
+The baseline reward includes a continuous hunger-proportional penalty $w_\text{hprop}(1-u_t) = -0.3(1-u_t)$. Every movement costs $c = 0.5$ hunger, triggering an incremental penalty of $|w_\text{hprop}| \cdot c / u_\text{max} = 0.0015$ per step. At $\gamma = 0.99$, the present value of this penalty stream over the expected remaining episode is
 \begin{equation}
 \text{PV}_\text{move} = \frac{0.0015}{1 - 0.99} = 0.15,
 \end{equation}
-while the maximum food proximity reward from one step is approximately $0.1 / 15 \approx 0.0067$. The movement penalty exceeds the approach reward by a factor of 22. Under this reward function, not moving is always Q-value optimal regardless of hunger level, producing a stasis equilibrium that no proximity gradient can overcome.
+while the maximum food proximity reward from one step is approximately $0.1 / 15 \approx 0.0067$. The movement penalty exceeds the approach reward by a factor of 22. Not moving is Q-value optimal regardless of hunger level. No proximity gradient can overcome this stasis equilibrium. Removing $w_\text{hprop}$ is a prerequisite for any proximity-based design.
 
-This structural incompatibility motivates removing $w_\text{hprop}$ and replacing it with a threshold-based penalty that does not couple to movement cost.
+\paragraph{Conditional proximity gating.}
+With the hunger-proportional penalty removed, the reward function can encode the three behavioral modes (forage, shelter, flee) through conditional PBRS delta proximity signals. The food proximity gradient ($w_\text{fprox} = 0.15$) activates only when the hunger ratio falls below 0.5. The shelter proximity gradient ($w_\text{sprox} = 0.15$) activates only above this threshold. The enemy proximity gradient ($w_\text{eprox} = -0.5$) is always active. This gating mirrors the heuristic's conditional logic through the reward function: the agent receives a spatial gradient toward food when it needs to eat and toward shelter when it does not.
 
-\paragraph{Configuration E1: threshold penalty with proximity gradients.}
-The first engineered configuration removes $w_\text{hprop}$, introduces a flat low-hunger penalty ($w_\text{hunger} = -0.5$ when $u_t < 0.3$), strengthens the food reward ($w_\text{food} = 8.0$) and food proximity ($w_\text{fprox} = 0.15$), and adds an enemy proximity gradient ($w_\text{eprox} = -0.5$). The flat penalty creates urgency without penalizing movement, since the penalty magnitude is independent of hunger level changes.
-
-E1 produces an agent that forages well and avoids enemies: it eats roughly twice as much food as the heuristic (2.0 vs 1.19 per episode) and takes less damage per tick. However, the agent moves every tick, burning hunger approximately 3.5 times faster than the heuristic. The heuristic, by contrast, idles near shelter when well-fed, conserving hunger for 60--70\% of each episode.
-
-\paragraph{Configuration E4: shelter proximity and survival tick.}
-To address the missing shelter-seeking behavior, E4 adds a shelter proximity gradient ($w_\text{sprox} = 0.15$) that mirrors the food proximity signal and gates both on the hunger threshold: food proximity fires only when hungry ($u_t < 0.5$), shelter proximity fires only when well-fed ($u_t \geq 0.5$). A small survival tick ($w_\text{tick} = 0.05$) directly rewards each step alive.
-
-\paragraph{Configuration E5: minimal reward set.}
-E5 strips the reward to three PBRS delta proximities (food, enemy, shelter) plus the death penalty. All event-driven rewards ($w_\text{food}$, $w_\text{edm}$, $w_\text{sdm}$), threshold penalties ($w_\text{hunger}$), and binary signals ($w_\text{shelter}$, $w_\text{tick}$) are set to zero. The hypothesis is that fewer signals reduce interference in Q-value estimation. The three proximity gradients directly encode the behavioral mode switch: hungry agents receive a gradient toward food, well-fed agents toward shelter, and all agents away from enemies.
-
-\paragraph{Configuration E6: adding food reward to E5.}
-E5 produces an agent with strong shelter and flee behavior but minimal foraging (0.57 food per episode). The survival gap to the heuristic (approximately 60 ticks) corresponds exactly to the food deficit: 0.6 fewer food items $\times$ 100 ticks of life per food item. The root cause is that E5 provides no reward for the terminal foraging action. The food proximity gradient guides the agent toward food, but eating triggers a state transition past the hunger threshold, which turns off the food proximity signal and activates the shelter proximity signal. From the Q-network's perspective, eating food transitions to a lower-reward state.
-
-E6 adds $w_\text{food} = 5.0$ to the E5 structure to reward the foraging completion event.
-
-\subsection{Results}
-\label{sec:results}
-
-All engineered configurations train for 2{,}000{,}000 timesteps on a single GPU. Evaluation uses 100 episodes with fixed seeds (1000--1099). Table~\ref{tab:results} reports benchmark results against the heuristic.
+\paragraph{The minimal reward set.}
+We tested configurations with varying numbers of reward components. Configurations combining proximity gradients with event-driven rewards (food eaten, damage taken), threshold penalties (low hunger), and binary signals (shelter safety, survival tick) consistently underperformed a minimal configuration using only the three conditional proximity gradients and the death penalty. All other weights are set to zero. Table~\ref{tab:minimal_config} lists the complete weight vector.
 
 \begin{table}[h]
 \centering
-\caption{Benchmark results (100 episodes, mean $\pm$ 95\% CI where available). Each engineered configuration is the best seed of three. The heuristic serves as the reference.}
-\label{tab:results}
+\caption{Minimal reward configuration. All unlisted components from Equation~\ref{eq:reward} are set to zero. Food and shelter proximity are conditionally gated on the hunger threshold $u_\text{thresh} = 0.5$.}
+\label{tab:minimal_config}
 \small
-\begin{tabular}{lrrrl}
+\begin{tabular}{llr}
 \toprule
-Configuration & Survival & Food & Damage & vs.\ Heuristic \\
+Component & Condition & Weight \\
 \midrule
-Heuristic         & $768 \pm 19$ & 1.19 & 99.5 & --- \\
-\midrule
-E4 (shelter prox) & $695 \pm 30$ & 2.19 & 99.2 & $-73$ ($p < 0.001$) \\
-E5 (minimal)      & $715 \pm 19$ & 0.66 & 101  & $-54$ ($p < 0.001$) \\
-E6 (E5 + food)    & $470 \pm 26$ & 0.81 & 100  & $-298$ ($p < 0.001$) \\
+Food proximity ($w_\text{fprox}$)    & PBRS delta, only when $u_t < 0.5$  & $+0.15$ \\
+Shelter proximity ($w_\text{sprox}$) & PBRS delta, only when $u_t \geq 0.5$ & $+0.15$ \\
+Enemy proximity ($w_\text{eprox}$)   & PBRS delta, always                   & $-0.50$ \\
+Death ($w_\text{death}$)             & Terminal                              & $-10.0$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Three findings emerge from these results.
+This configuration removes all event-driven rewards, threshold penalties, and binary signals. The hypothesis is that fewer signals reduce interference in Q-value estimation. The three proximity gradients encode the behavioral mode switch directly, and the death penalty provides a terminal signal for TD bootstrapping.
 
-\paragraph{Fewer signals outperform more signals.} E5 (four reward components) survives longer than E4 (nine components): $715$ vs $695$ ticks. E5 achieves this despite eating less than half the food. The minimal reward set produces a coherent conservative policy (stay near shelter, avoid enemies) without the conflicting gradients that arise from combining event-driven and proximity-based signals. This is consistent with the observation in \citet{Hessel2018} that adding components can degrade performance when they interact destructively.
+Note that this minimal configuration renders most of the feasibility constraints (C1, C2, C4, C5) vacuous, since they involve $w_\text{hprop}$ which is zero. The constraints were useful as analytical tools that guided the design away from degenerate weight combinations, not as active bounds on the final configuration.
 
-\paragraph{Adding a food reward destabilizes learned behavior.} E6 adds a single component ($w_\text{food} = 5.0$) to E5's minimal structure. Rather than improving foraging on top of E5's shelter and flee behavior, it degrades both: survival drops from 715 to 470 ticks, and enemy damage increases from 10 to 100 per episode. The food reward creates a competing gradient that overwhelms the enemy proximity signal, causing the agent to approach food even when enemies are nearby.
+\paragraph{Food reward destabilization.}
+The minimal agent learns strong shelter and flee behavior but forages inconsistently (0.58 food per episode vs.\ the heuristic's 1.19). The survival gap of approximately 60 ticks corresponds exactly to the food deficit: 0.6 fewer food items $\times$ 100 ticks of life per food item. This motivates adding an explicit food reward.
 
-\paragraph{The mode-switching problem.} All configurations perform below the heuristic. The heuristic implements explicit conditional logic: flee if enemy nearby, forage if hungry, otherwise shelter. The DQN must learn an equivalent conditional policy from the scalar hunger ratio in its observation. E4 over-forages (moves every tick). E5 under-forages (barely eats). Neither achieves the balanced switching that the heuristic encodes by construction. The Q-network must represent a sharp nonlinearity in the hunger ratio dimension where the optimal action flips between ``approach food'' and ``approach shelter.'' Learning this transition from reward signal alone, without explicit mode labels, is the central difficulty.
+However, adding $w_\text{food}$ at any tested magnitude destabilizes the learned behavior. At $w_\text{food} = 5.0$, survival drops from 706 to 467 ticks and enemy damage increases tenfold. At $w_\text{food} = 2.0$ (with a compensating damage penalty $w_\text{edm} = -0.3$), survival drops to 497 ticks. The food reward creates a competing Q-value gradient that overwhelms the enemy proximity signal, causing the agent to pursue food even when enemies are nearby. The magnitude required to affect foraging behavior exceeds the threshold that preserves the flee behavior.
+
+\subsection{Results}
+\label{sec:results}
+
+Table~\ref{tab:results} reports benchmark results across all tested configurations.
+
+\begin{table}[h]
+\centering
+\caption{Benchmark results (100 episodes, mean $\pm$ 95\% CI). Engineered configurations report the best seed of three. Richer signal configurations include event-driven rewards, threshold penalties, and binary signals in addition to proximity gradients.}
+\label{tab:results}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Configuration & Survival & Food & Damage & Death rate \\
+\midrule
+Heuristic                      & $768 \pm 19$ & 1.19 & 99.5  & 95\% \\
+\midrule
+Minimal (4 components)         & $706 \pm 19$ & 0.58 & 10.4  & 100\% \\
+Rich signal (9 components)     & $695 \pm 30$ & 2.19 & 99.2  & 100\% \\
+Minimal + food ($w_\text{food} = 5.0$) & $467 \pm 26$ & 0.81 & 100 & 100\% \\
+Minimal + food ($w_\text{food} = 2.0$) & $497 \pm 28$ & 0.70 & 126 & 100\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The minimal configuration achieves the best survival (706 ticks) and the lowest damage (10.4 per episode, roughly 0.7 enemy hits). The rich signal configuration eats more food (2.19, nearly double the heuristic) but survives less because it never learns to shelter. Both food reward variants severely degrade performance.
+
+\paragraph{Episode-level decomposition.}
+Aggregate metrics obscure a bimodal pattern in the minimal agent's behavior. Across 100 benchmark episodes, the agent eats zero food in approximately 50\% of episodes, surviving an average of 654 ticks. In the remaining episodes where it eats one or more food items, it survives an average of 767 ticks, matching the heuristic. Each food item adds approximately 70 ticks of survival (0-food: 654, 1-food: 721, 2-food: 838, 3-food: 910).
+
+The agent can forage. It does not do so consistently. During training, the best seed briefly reached 766.9 mean survival at step 1.56M (20-episode greedy evaluation), but this performance was not stable and decayed in subsequent evaluations.
+
+\paragraph{Cold start problem.}
+The foraging inconsistency traces to a cold start in the PBRS delta reward. Delta proximity gives reward proportional to the change in closeness: $\Delta\phi_t = \phi_t - \phi_{t-1}$. An agent sitting in shelter with $\phi_{t-1} = \phi_t$ receives zero food proximity signal regardless of its hunger level. There is no reward gradient for the first step out of shelter toward food. Once the agent begins moving, the proximity signal activates and guides it toward the nearest food. But the initial decision to leave shelter must be made without any reward signal, relying entirely on the Q-network's generalization from previous episodes where it happened to forage.
+
+\paragraph{Curriculum learning.}
+We tested a two-phase curriculum: phase 1 trains for 1{,}000{,}000 steps in an enemy-free environment (food and shelter only), then phase 2 fine-tunes in the full environment using the phase 1 weights as initialization. The hypothesis was that foraging behavior learned without enemies would transfer to the full environment and improve survival over the from-scratch baseline.
+
+Curriculum training produced 685 mean survival, below the from-scratch minimal configuration (706). The foraging behavior learned without enemies did not survive the introduction of enemy avoidance. The agent must learn to coordinate foraging with fleeing, which requires training in the full environment from the start.
 
 \subsection{Analysis}
 \label{sec:analysis}
 
-\paragraph{Reward budget decomposition.}
-The engineered progression illustrates a recurring pattern: each reward component consumes a share of the Q-value budget, and components that dominate this budget determine behavior. The hunger-proportional penalty consumes the entire budget through its interaction with movement cost (factor-22 structural incompatibility). Removing it frees the budget for proximity gradients. But proximity gradients themselves compete: food proximity pulls the agent into danger zones, enemy proximity pushes it toward shelter, and shelter proximity rewards passivity. The optimal balance depends on the agent's current hunger state, which the reward function cannot condition on (only the policy can).
+\paragraph{Signal interference in Q-value estimation.}
+The minimal vs.\ rich signal comparison suggests that signal interference, not signal insufficiency, is the primary obstacle. The rich configuration provides strictly more information per step (damage penalties, threshold penalties, shelter safety) but produces a less coherent policy. Multiple reward components create noisy TD targets: the same state-action pair produces different reward magnitudes depending on which components fire, increasing the variance of the Bellman backup. With fewer components, the target variance decreases, producing a cleaner value function despite receiving less information per step.
 
 \paragraph{PBRS delta proximity does not cause hovering.}
-A key design choice is the use of delta (PBRS) proximity rather than absolute proximity. Absolute proximity rewards the agent for being near food, creating the food-hovering failure mode described in Section~\ref{sec:failure_modes}. Delta proximity rewards only the change in distance: approaching gives a positive reward, and staying near gives zero. This eliminates the hovering incentive. All engineered configurations use delta proximity, and none exhibit hovering behavior.
+A key design choice is the use of delta (PBRS) proximity rather than absolute proximity. Absolute proximity rewards the agent for being near food, creating the food-hovering failure mode described in Section~\ref{sec:failure_modes}. Delta proximity rewards only the change in distance: approaching gives positive reward, staying near gives zero. This eliminates the hovering incentive. All engineered configurations use delta proximity, and none exhibit hovering behavior.
 
-\paragraph{Signal interference in Q-value estimation.}
-The E5 vs E4 comparison suggests that signal interference, rather than signal insufficiency, is the primary obstacle. E4 provides richer information (damage penalties, threshold penalties, shelter safety) but the Q-network produces a less coherent policy. One explanation is that multiple reward components create a noisy TD target: the same state-action pair produces different reward magnitudes depending on which components fire, increasing the variance of the Bellman backup. With fewer components, the target variance decreases, allowing the network to learn a cleaner value function even though it receives less information per step.
+\paragraph{The mode-switching bottleneck.}
+All configurations perform below the heuristic. The heuristic implements explicit conditional logic: flee if enemy nearby, forage if hungry, otherwise shelter. The DQN must learn this from the scalar hunger ratio in its observation vector. The Q-network must represent a sharp nonlinearity in the hunger dimension where the optimal action switches between ``approach food'' and ``approach shelter.'' The cold start problem compounds this: even when the network has learned the nonlinearity, it receives no reward gradient for the initial shelter departure that triggers the foraging mode.
+
+\paragraph{Temporal context.}
+The agent processes a single $15 \times 15$ snapshot per step. It cannot directly observe whether an enemy is approaching or retreating, which direction it was walking, or how entities have moved between steps. Frame stacking (providing the last $N$ spatial observations as additional channels) gives the CNN access to motion information. This is relevant because the PBRS delta rewards encode temporal change, but the network has no temporal input to predict those deltas. We test 4-frame stacking as an architectural intervention alongside extended training (5M steps) with tuned hyperparameters.
 
 % =============================================================================
 \section{Discussion}
@@ -510,32 +535,31 @@ The E5 vs E4 comparison suggests that signal interference, rather than signal in
 % =============================================================================
 
 \paragraph{Reward design as constrained optimization.}
-The feasibility constraints C1--C7 formalize reward design as a system of inequalities over the weight vector. Satisfying all constraints is necessary but not sufficient for good performance: the baseline satisfies all seven constraints yet still produces suboptimal behavior due to the structural incompatibility between hunger-proportional penalty and movement cost. The constraints rule out degenerate policies but cannot guarantee that the agent learns the intended conditional behavior.
+The feasibility constraints C1--C7 formalize reward design as a system of inequalities over the weight vector. They correctly predict three failure modes and successfully narrow the design space. However, they are necessary but not sufficient: the baseline satisfies all seven constraints yet still produces suboptimal behavior due to the structural incompatibility between hunger-proportional penalty and movement cost. More fundamentally, the best-performing configuration (minimal) renders most constraints vacuous by zeroing the weights they bound. The constraints were most useful as analytical tools that guided the design process, not as active bounds on the final configuration.
 
 \paragraph{The cost of reward complexity.}
-The E5 vs E4 result challenges the intuition that more informative rewards produce better policies. In multi-objective settings, each additional reward component introduces a potential source of interference in Q-value estimation. The agent does not receive separate Q-values per objective; it learns a single scalar value function that must integrate all reward components. When components create conflicting gradients (food proximity pulls toward danger, enemy proximity pushes away), the resulting value function is a noisy compromise rather than a clean conditional policy.
+The minimal vs.\ rich signal result challenges the intuition that more informative rewards produce better policies. In multi-objective settings, each additional reward component introduces a potential source of interference. The agent learns a single scalar value function that must integrate all reward components. When components create conflicting gradients (food proximity pulls toward danger, enemy proximity pushes away), the resulting value function is a noisy compromise rather than a clean conditional policy.
 
-This suggests a design principle: prefer fewer, PBRS-compliant reward components that encode the behavioral mode switch through conditional gating, over many concurrent signals that each encode a partial aspect of the desired behavior.
+This suggests a design principle: prefer fewer, PBRS-compliant reward components that encode the behavioral mode switch through conditional gating, rather than many concurrent signals that each encode a partial aspect of the desired behavior.
+
+\paragraph{The food reward paradox.}
+The inability to add any food reward without destabilizing the agent is the most counterintuitive finding. The minimal agent clearly under-forages, and the food reward directly incentivizes the missing behavior. Yet every magnitude tested (2.0 and 5.0) causes the agent to trade safety for food, as the food reward gradient competes with the enemy proximity gradient in overlapping spatial regions. The magnitudes required to affect foraging decisions exceed the threshold that preserves flee behavior. This suggests that the food reward problem cannot be solved through magnitude tuning alone. A structural change to the agent (temporal context, separate value heads, or a hierarchical policy) may be required.
 
 \paragraph{Limitations.}
-The focus of this work is reward shaping, not hyperparameter optimization. Architecture and training hyperparameters were fixed across all experiments to isolate the effect of reward configuration. A systematic hyperparameter search could likely improve absolute performance but is orthogonal to our research question.
-
-The environment is a single grid world. The findings may not transfer directly to continuous-action domains, partially observable environments with longer horizons, or tasks where the competing objectives have different time scales. The comparison is against a single heuristic baseline; policy gradient methods (PPO, A2C) may respond differently to the same reward configurations.
-
-The DQN architecture processes the hunger ratio as a scalar input concatenated with spatial features. Alternative architectures that provide the hunger state more directly to the decision layer (e.g., through a gating mechanism or separate value heads per behavioral mode) might reduce the difficulty of learning the mode switch. We did not explore such architectural modifications, as they would conflate reward effects with architecture effects.
+This work isolates the effect of reward shaping; architecture and training hyperparameters are held constant across the main experiments. A systematic hyperparameter search could improve absolute performance but is orthogonal to the research question. The environment is a single grid world; the findings may not transfer to continuous-action domains or longer horizons. The comparison is against a single heuristic; policy gradient methods (PPO, A2C) may respond differently to the same reward configurations.
 
 % =============================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 % =============================================================================
 
-We studied how reward function design affects learned behavior in a multi-objective survival task. By varying reward weights while holding the agent architecture fixed, we identified three systematic failure modes (oscillation, food hovering, suicide) and derived seven feasibility constraints that prevent them. Configurations satisfying all constraints avoid degenerate behavior but do not guarantee performance matching a scripted heuristic.
+We studied how reward function design affects learned behavior in a multi-objective survival task. By varying reward weights while holding the agent architecture fixed, we identified three systematic failure modes and derived seven feasibility constraints that prevent them. We discovered a structural incompatibility between the hunger-proportional penalty and the discount factor that produces stasis regardless of proximity reward strength.
 
-The central finding is that reward complexity can be counterproductive. A minimal configuration with four components (three PBRS delta proximity gradients and a death penalty) outperforms a nine-component configuration that provides strictly more information per step. The minimal agent learns a coherent conservative policy, while the richer signal produces conflicting Q-value gradients that degrade both foraging and survival.
+The central finding is that reward complexity is counterproductive. A minimal configuration with four components (three conditional PBRS delta proximity gradients and a death penalty) outperforms richer alternatives that provide strictly more information per step. The minimal agent learns a coherent policy for shelter-seeking and enemy avoidance but forages inconsistently. Episode-level analysis reveals that when the agent does forage, it matches the heuristic baseline, suggesting the representational capacity is sufficient but the reward signal is not.
 
-No configuration matches the heuristic baseline. The gap is attributable to the mode-switching problem: the heuristic implements explicit conditional logic (flee/forage/shelter) that the DQN must learn implicitly from a scalar hunger observation. The reward function can create gradients for each behavioral mode, but it cannot directly encode the transition between modes. Learning this transition from reward signal alone remains an open challenge.
+The remaining performance gap traces to two problems. First, a cold start: PBRS delta proximity gives zero signal to initiate the first foraging step from shelter. Second, mode-switching: the agent must learn a sharp conditional policy from a scalar hunger observation, which the reward function can incentivize but not encode. Adding explicit food rewards at any tested magnitude destabilizes the learned behavior rather than improving it.
 
-Future work could explore curriculum learning (training without enemies before introducing them), hierarchical architectures with explicit mode selection, or automated reward weight optimization through population-based methods.
+These findings point toward architectural rather than reward-level interventions. Temporal observation context (frame stacking), extended training, and alternative exploration strategies address different aspects of the problem. Whether these close the gap to the heuristic remains an open question under active investigation.
 
 % =============================================================================
 % References
