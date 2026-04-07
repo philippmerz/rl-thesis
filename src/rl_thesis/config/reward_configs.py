@@ -396,6 +396,34 @@ REWARD_CONFIGS: Dict[str, Dict[str, Any]] = {
         },
     },
 
+    # V5 + moderate food_eaten reward (0.3).
+    #
+    # V5 shelter-camps because foraging is reward-invisible: the
+    # proximity deltas yield +0.05 per trip, 20-200x below TD noise.
+    # food_eaten at 2.0-5.0 overwhelmed the flee gradient (-0.5).
+    # At 0.3, a clean foraging trip nets +0.35 total, detectable
+    # above noise but still dominated locally by enemy proximity.
+    "engineered_v6": {
+        "reward_food_eaten": 0.3,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "_dqn": {
+            "total_timesteps": 5_000_000,
+            "epsilon_decay_steps": 1_000_000,
+            "buffer_size": 1_000_000,
+            "tau": 0.002,
+        },
+    },
+
     "engineered_v4": {
         "reward_hunger_proportional": 0.0,
         "reward_low_hunger": -0.5,
