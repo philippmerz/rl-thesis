@@ -247,7 +247,7 @@ REWARD_CONFIGS: Dict[str, Dict[str, Any]] = {
     # Fix: add food_eaten=5.0 to make the foraging trip terminal
     # action explicitly rewarding. Five signals total: three PBRS
     # delta proximities, one discrete food event, one terminal death.
-    "engineered_v6": {
+    "engineered_v5_food5": {
         "reward_food_eaten": 5.0,
         "reward_starvation_damage": 0.0,
         "reward_hunger_proportional": 0.0,
@@ -364,6 +364,37 @@ REWARD_CONFIGS: Dict[str, Dict[str, Any]] = {
         "reward_shelter_proximity": 0.15,
         "reward_shelter_safety": 0.0,
         "reward_survival_tick": 0.0,
+    },
+
+    # V5 with 4-frame stacking for temporal context.
+    #
+    # The agent sees a single snapshot and cannot observe movement
+    # direction, enemy approach/retreat, or its own trajectory.
+    # Stacking the last 4 spatial grids (12 channels instead of 3)
+    # gives the CNN access to motion patterns.
+    #
+    # Buffer reduced to 250K (stacked obs is 4x larger in memory).
+    # 5M steps with tuned hyperparameters as in v5_long.
+    "engineered_v5_fs": {
+        "reward_food_eaten": 0.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "_dqn": {
+            "frame_stack": 4,
+            "total_timesteps": 5_000_000,
+            "epsilon_decay_steps": 1_000_000,
+            "buffer_size": 250_000,
+            "tau": 0.002,
+        },
     },
 
     # V5 with extended training and tuned DQN hyperparameters.

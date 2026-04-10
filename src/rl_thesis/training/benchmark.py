@@ -69,9 +69,14 @@ def evaluate_dqn(
 ) -> Dict[str, List[float]]:
     """Run a DQN checkpoint and collect per-episode statistics."""
     from rl_thesis.agent.dqn import DQNAgent
+    from rl_thesis.environment.frame_stack import FrameStackEnv
 
     agent = DQNAgent.from_checkpoint(checkpoint_path)
     env = SurvivalEnv(world_config)
+
+    frame_stack = getattr(agent.config, 'frame_stack', 1)
+    if frame_stack > 1:
+        env = FrameStackEnv(env, frame_stack)
 
     results: Dict[str, List[float]] = {
         "survival": [], "food_eaten": [], "damage_taken": [],

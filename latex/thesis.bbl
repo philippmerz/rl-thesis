@@ -1,0 +1,132 @@
+\begin{thebibliography}{19}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Amodei et~al.(2016)Amodei, Olah, Steinhardt, Christiano, Schulman, and
+  Man{\'e}]{Amodei2016}
+Dario Amodei, Chris Olah, Jacob Steinhardt, Paul Christiano, John Schulman, and
+  Dan Man{\'e}.
+\newblock Concrete problems in ai safety.
+\newblock \emph{arXiv preprint arXiv:1606.06565}, 2016.
+\newblock \doi{10.48550/arXiv.1606.06565}.
+
+\bibitem[Ba et~al.(2016)Ba, Kiros, and Hinton]{Ba2016}
+Jimmy~Lei Ba, Jamie~Ryan Kiros, and Geoffrey~E. Hinton.
+\newblock Layer normalization.
+\newblock \emph{arXiv preprint arXiv:1607.06450}, 2016.
+
+\bibitem[Clark et~al.(2024)]{Clark2024}
+Jack Clark et~al.
+\newblock Beyond the rainbow: High performance deep {RL} on a desktop {PC}.
+\newblock \emph{arXiv preprint arXiv:2411.03820}, 2024.
+
+\bibitem[Dohare et~al.(2024)Dohare, Lan, and Mahmood]{Dohare2024}
+Shibhansh Dohare, Qingfeng Lan, and A.~Rupam Mahmood.
+\newblock Loss of plasticity in deep continual learning.
+\newblock \emph{Nature}, 632:\penalty0 768--774, 2024.
+
+\bibitem[Fortunato et~al.(2018)Fortunato, Azar, Piot, Menick, Osband, Graves,
+  Mnih, Munos, Hassabis, Pietquin, Blundell, and Legg]{Fortunato2018}
+Meire Fortunato, Mohammad~Gheshlaghi Azar, Bilal Piot, Jacob Menick, Ian
+  Osband, Alex Graves, Vlad Mnih, Remi Munos, Demis Hassabis, Olivier Pietquin,
+  Charles Blundell, and Shane Legg.
+\newblock Noisy networks for exploration.
+\newblock In \emph{Proceedings of the International Conference on Learning
+  Representations}, 2018.
+
+\bibitem[Hessel et~al.(2018)Hessel, Modayil, van Hasselt, Schaul, Ostrovski,
+  Dabney, Horgan, Piot, Azar, and Silver]{Hessel2018}
+Matteo Hessel, Joseph Modayil, Hado van Hasselt, Tom Schaul, Georg Ostrovski,
+  Will Dabney, Dan Horgan, Bilal Piot, Mohammad Azar, and David Silver.
+\newblock Rainbow: Combining improvements in deep reinforcement learning.
+\newblock In \emph{Proceedings of the AAAI Conference on Artificial
+  Intelligence}, 2018.
+
+\bibitem[Lillicrap et~al.(2016)Lillicrap, Hunt, Pritzel, Heess, Erez, Tassa,
+  Silver, and Wierstra]{Lillicrap2016}
+Timothy~P. Lillicrap, Jonathan~J. Hunt, Alexander Pritzel, Nicolas Heess, Tom
+  Erez, Yuval Tassa, David Silver, and Daan Wierstra.
+\newblock Continuous control with deep reinforcement learning.
+\newblock In \emph{Proceedings of the International Conference on Learning
+  Representations}, 2016.
+
+\bibitem[Loshchilov and Hutter(2019)]{Loshchilov2019}
+Ilya Loshchilov and Frank Hutter.
+\newblock Decoupled weight decay regularization.
+\newblock In \emph{Proceedings of the International Conference on Learning
+  Representations}, 2019.
+
+\bibitem[Lyle et~al.(2023)Lyle, Rowland, and Dabney]{Lyle2023}
+Clare Lyle, Mark Rowland, and Will Dabney.
+\newblock Understanding plasticity in neural networks.
+\newblock In \emph{Proceedings of the International Conference on Machine
+  Learning}, 2023.
+
+\bibitem[Mnih et~al.(2013)Mnih, Kavukcuoglu, Silver, Graves, Antonoglou,
+  Wierstra, and Riedmiller]{Mnih2013}
+Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis
+  Antonoglou, Daan Wierstra, and Martin Riedmiller.
+\newblock Playing {Atari} with deep reinforcement learning.
+\newblock \emph{arXiv preprint arXiv:1312.5602}, 2013.
+
+\bibitem[Mnih et~al.(2015)Mnih, Kavukcuoglu, Silver, Rusu, Veness, Bellemare,
+  Graves, Riedmiller, Fidjeland, Ostrovski, et~al.]{Mnih2015}
+Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei~A. Rusu, Joel Veness,
+  Marc~G. Bellemare, Alex Graves, Martin Riedmiller, Andreas~K. Fidjeland,
+  Georg Ostrovski, et~al.
+\newblock Human-level control through deep reinforcement learning.
+\newblock \emph{Nature}, 518\penalty0 (7540):\penalty0 529--533, 2015.
+
+\bibitem[Ng et~al.(1999)Ng, Harada, and Russell]{Ng1999}
+Andrew~Y. Ng, Daishi Harada, and Stuart Russell.
+\newblock Policy invariance under reward transformations: Theory and
+  application to reward shaping.
+\newblock In \emph{Proceedings of the International Conference on Machine
+  Learning}, 1999.
+
+\bibitem[Obando-Ceron and Castro(2021)]{ObandoCeron2021}
+Johan~S. Obando-Ceron and Pablo~Samuel Castro.
+\newblock Revisiting rainbow: Promoting more insightful and inclusive deep {RL}
+  research.
+\newblock In \emph{NeurIPS Deep RL Workshop}, 2021.
+
+\bibitem[Schaul et~al.(2016)Schaul, Quan, Antonoglou, and Silver]{Schaul2016}
+Tom Schaul, John Quan, Ioannis Antonoglou, and David Silver.
+\newblock Prioritized experience replay.
+\newblock In \emph{Proceedings of the International Conference on Learning
+  Representations}, 2016.
+
+\bibitem[Smith and Topin(2019)]{Smith2019}
+Leslie~N. Smith and Nicholay Topin.
+\newblock Super-convergence: Very fast training of neural networks using large
+  learning rates.
+\newblock \emph{arXiv preprint arXiv:1708.07120}, 2019.
+
+\bibitem[Sutton(1988)]{Sutton1988}
+Richard~S. Sutton.
+\newblock Learning to predict by the methods of temporal differences.
+\newblock \emph{Machine Learning}, 3\penalty0 (1):\penalty0 9--44, 1988.
+
+\bibitem[Sutton and Barto(2018)]{SuttonBarto2018}
+Richard~S. Sutton and Andrew~G. Barto.
+\newblock \emph{Reinforcement Learning: An Introduction}.
+\newblock MIT Press, 2nd edition, 2018.
+
+\bibitem[van Hasselt et~al.(2016)van Hasselt, Guez, and Silver]{vanHasselt2016}
+Hado van Hasselt, Arthur Guez, and David Silver.
+\newblock Deep reinforcement learning with double {Q}-learning.
+\newblock In \emph{Proceedings of the AAAI Conference on Artificial
+  Intelligence}, 2016.
+
+\bibitem[Wang et~al.(2016)Wang, Schaul, Hessel, van Hasselt, Lanctot, and
+  de~Freitas]{Wang2016}
+Ziyu Wang, Tom Schaul, Matteo Hessel, Hado van Hasselt, Marc Lanctot, and Nando
+  de~Freitas.
+\newblock Dueling network architectures for deep reinforcement learning.
+\newblock In \emph{Proceedings of the International Conference on Machine
+  Learning}, 2016.
+
+\end{thebibliography}
