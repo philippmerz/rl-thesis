@@ -21,6 +21,10 @@ def demo(
         None, "--checkpoint", "-c",
         help="Path to a DQN checkpoint to demo instead of the heuristic agent",
     ),
+    frame_stack: int = typer.Option(
+        None, "--frame-stack",
+        help="Override frame stack size (default: read from checkpoint config, 1 if absent)",
+    ),
 ):
     from rl_thesis.demo.demo import run_demo
 
@@ -29,6 +33,7 @@ def demo(
         heuristic_config=HumanHeuristicConfig(),
         vis_config=VisualizationConfig(),
         checkpoint_path=checkpoint,
+        frame_stack=frame_stack,
     )
 
 

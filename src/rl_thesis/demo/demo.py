@@ -16,6 +16,7 @@ def run_demo(
     heuristic_config: HumanHeuristicConfig,
     vis_config: VisualizationConfig,
     checkpoint_path: Optional[str] = None,
+    frame_stack: Optional[int] = None,
 ):
     if checkpoint_path is not None:
         from rl_thesis.agent.dqn import DQNAgent
@@ -37,7 +38,8 @@ def run_demo(
     env = SurvivalEnv(world_config)
 
     if dqn_agent is not None:
-        frame_stack = getattr(dqn_agent.config, 'frame_stack', 1)
+        if frame_stack is None:
+            frame_stack = getattr(dqn_agent.config, 'frame_stack', 1)
         if frame_stack > 1:
             env = FrameStackEnv(env, frame_stack)
 
