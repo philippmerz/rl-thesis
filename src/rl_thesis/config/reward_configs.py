@@ -397,6 +397,79 @@ REWARD_CONFIGS: Dict[str, Dict[str, Any]] = {
         },
     },
 
+    # V5_fs + gamma=1 + survival_tick: make survival explicitly visible.
+    #
+    # V5_fs peaked early (867 survival at 350K steps) then collapsed.
+    # Root cause: gamma=0.99 gives effective horizon ~100 steps. The
+    # death penalty at t=700 has present value -0.009, essentially zero.
+    # The agent is discount-blind to mortality: dying at t=700 vs t=1000
+    # looks identical in Q-values.
+    #
+    # Fix:
+    # - gamma=1.0 makes the death penalty fully visible at any horizon.
+    #   Q-values remain bounded because episode length is capped at 1000.
+    # - survival_tick=0.005 creates a dense per-step reward for staying
+    #   alive (max +5 per episode). Stays within H3 bound (<0.014).
+    # - epsilon_end=0.05 prevents policy collapse to pure shelter-camping
+    #   by maintaining some exploration late in training.
+    #
+    # Combined with frame stacking's perceptual capacity (proven by the
+    # 867 peak), this should produce stable conditional foraging.
+    "engineered_v6_fs_g1": {
+        "reward_food_eaten": 0.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.005,
+        "_dqn": {
+            "frame_stack": 4,
+            "total_timesteps": 5_000_000,
+            "epsilon_decay_steps": 1_000_000,
+            "epsilon_end": 0.05,
+            "buffer_size": 250_000,
+            "tau": 0.002,
+            "gamma": 1.0,
+        },
+    },
+
+    # V5_fs + small food_eaten: backup experiment.
+    #
+    # Prior food_eaten experiments (2.0, 5.0) destabilized V5's flee
+    # behavior because the food reward competed with the enemy proximity
+    # gradient (-0.5). At 0.3, a successful foraging trip nets ~+0.35
+    # total (+0.05 proximity + 0.30 food eaten), while enemy proximity
+    # cost per approach step is ~0.033. Ratio preserves flee priority.
+    # epsilon_end=0.05 for policy-collapse prevention.
+    "engineered_v6_fs_food": {
+        "reward_food_eaten": 0.3,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "_dqn": {
+            "frame_stack": 4,
+            "total_timesteps": 5_000_000,
+            "epsilon_decay_steps": 1_000_000,
+            "epsilon_end": 0.05,
+            "buffer_size": 250_000,
+            "tau": 0.002,
+        },
+    },
+
     # V5 with extended training and tuned DQN hyperparameters.
     #
     # V5 seed 42 peaked at 766.9 survival (step 1.56M) before
