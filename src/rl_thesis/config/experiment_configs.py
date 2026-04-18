@@ -1,7 +1,16 @@
-"""Named reward configurations for the experiment grid.
+"""Named experiment configurations.
 
-Each config is a dict of WorldConfig field overrides.
-Only reward-related fields are changed; world mechanics stay constant.
+Each entry defines one reproducible experiment. A config may override:
+
+- WorldConfig fields: reward weights, world mechanics (movement cost,
+  enemy density, spawn rates), observation parameters.
+- DQNConfig fields: hyperparameters such as ``frame_stack``, ``gamma``,
+  ``lr_schedule``, ``head_reset_freq``, ``epsilon_cycle_steps``, etc.
+
+The two override sets are separated by an optional ``_dqn`` key: any
+top-level key applies to WorldConfig, and entries under ``_dqn`` apply
+to DQNConfig. Use :func:`make_world_config` and :func:`make_dqn_config`
+to materialize both.
 
 Reward Feasibility Constraints
 ==============================
@@ -84,10 +93,10 @@ from typing import Dict, Any
 
 from rl_thesis.config.config import WorldConfig, DQNConfig
 
-# Each config is a dict of WorldConfig field overrides.
-# An optional "_dqn" key holds DQNConfig overrides for the experiment,
-# keeping reward shaping and hyperparameter choices in one place.
-REWARD_CONFIGS: Dict[str, Dict[str, Any]] = {
+# Top-level keys are WorldConfig field overrides. An optional "_dqn" key
+# holds DQNConfig overrides for the experiment, keeping reward shaping,
+# world mechanics, and agent hyperparameters in one place per experiment.
+EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
     # Feasible baseline: all constraints C1-C7 satisfied.
     # Uses delta-based (PBRS) proximity reward.
     "baseline": {},
@@ -676,25 +685,25 @@ REWARD_CONFIGS: Dict[str, Dict[str, Any]] = {
 
 def _split_overrides(config_name: str) -> tuple[Dict[str, Any], Dict[str, Any]]:
     """Split a config entry into WorldConfig overrides and DQNConfig overrides."""
-    if config_name not in REWARD_CONFIGS:
-        available = ", ".join(sorted(REWARD_CONFIGS))
-        raise ValueError(f"Unknown reward config '{config_name}'. Available: {available}")
-    raw = REWARD_CONFIGS[config_name]
+    if config_name not in EXPERIMENT_CONFIGS:
+        available = ", ".join(sorted(EXPERIMENT_CONFIGS))
+        raise ValueError(f"Unknown experiment config '{config_name}'. Available: {available}")
+    raw = EXPERIMENT_CONFIGS[config_name]
     dqn_overrides = raw.get("_dqn", {})
     world_overrides = {k: v for k, v in raw.items() if k != "_dqn"}
     return world_overrides, dqn_overrides
 
 
 def make_world_config(config_name: str, seed: int = 42) -> WorldConfig:
-    """Create a WorldConfig with the named reward configuration applied."""
+    """Create a WorldConfig with the named experiment's world overrides applied."""
     world_overrides, _ = _split_overrides(config_name)
     return replace(WorldConfig(initial_seed=seed), **world_overrides)
 
 
 def make_dqn_config(config_name: str, **cli_overrides: Any) -> DQNConfig:
-    """Create a DQNConfig with config-level and CLI overrides applied.
+    """Create a DQNConfig with the named experiment's DQN overrides and CLI overrides.
 
-    CLI overrides take precedence over config-level _dqn overrides.
+    CLI overrides take precedence over config-level ``_dqn`` overrides.
     """
     _, dqn_overrides = _split_overrides(config_name)
     merged = {**dqn_overrides, **cli_overrides}
@@ -702,30 +711,24 @@ def make_dqn_config(config_name: str, **cli_overrides: Any) -> DQNConfig:
 
 
 def get_config_names() -> list[str]:
-    return list(REWARD_CONFIGS.keys())
+    """Return all registered experiment config names."""
+    return list(EXPERIMENT_CONFIGS.keys())
 
 
 def describe_config(config_name: str) -> Dict[str, Any]:
-    """Return the full reward weights for a named config (with defaults filled in)."""
-    wc = make_world_config(config_name)
-    return {
-        "reward_food_eaten": wc.reward_food_eaten,
-        "reward_survival_tick": wc.reward_survival_tick,
-        "reward_death": wc.reward_death,
-        "reward_enemy_damage_taken": wc.reward_enemy_damage_taken,
-        "reward_starvation_damage": wc.reward_starvation_damage,
-        "reward_low_hunger": wc.reward_low_hunger,
-        "reward_hunger_proportional": wc.reward_hunger_proportional,
-        "reward_food_visible_proximity": wc.reward_food_visible_proximity,
-        "reward_enemy_proximity": wc.reward_enemy_proximity,
-        "reward_shelter_proximity": wc.reward_shelter_proximity,
-        "reward_shelter_safety": wc.reward_shelter_safety,
-        "low_hunger_threshold": wc.low_hunger_threshold,
-    }
+    """Return the explicit overrides defined for this config.
+
+    Shows only the fields this config actually changes from the defaults,
+    split into ``world`` (WorldConfig overrides) and ``dqn`` (DQNConfig
+    overrides). Unmodified fields follow the defaults in
+    :class:`WorldConfig` and :class:`DQNConfig`.
+    """
+    world_overrides, dqn_overrides = _split_overrides(config_name)
+    return {"world": dict(world_overrides), "dqn": dict(dqn_overrides)}
 
 
 def validate_config(config_name: str) -> list[str]:
-    """Check reward feasibility constraints C1-C7. Returns list of violations."""
+    """Check reward feasibility heuristics H1-H4. Returns list of violations."""
     wc = make_world_config(config_name)
 
     w_food = wc.reward_food_eaten

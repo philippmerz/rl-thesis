@@ -1,9 +1,9 @@
 """Benchmark evaluation: compare any agent against the heuristic baseline.
 
 Usage:
-    python -m rl_thesis.training.benchmark                          # heuristic only
-    python -m rl_thesis.training.benchmark --checkpoint path/to.pt  # DQN vs heuristic
-    python -m rl_thesis.training.benchmark --config engineered      # heuristic with custom world config
+    python -m rl_thesis.training.benchmark                              # heuristic only
+    python -m rl_thesis.training.benchmark --checkpoint path/to.pt      # DQN vs heuristic
+    python -m rl_thesis.training.benchmark --config engineered_v7_fs    # custom world config
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 from rl_thesis.config.config import WorldConfig, HumanHeuristicConfig
-from rl_thesis.config.reward_configs import make_world_config
+from rl_thesis.config.experiment_configs import make_world_config
 from rl_thesis.environment.gym_env import SurvivalEnv
 from rl_thesis.agent.human_heuristic import HumanHeuristicAgent
 
@@ -183,7 +183,7 @@ def main() -> None:
     parser.add_argument("--checkpoint", type=str, default=None,
                         help="Path to DQN checkpoint to evaluate")
     parser.add_argument("--config", type=str, default=None,
-                        help="Reward config name for world config")
+                        help="Experiment config name for world config")
     parser.add_argument("--episodes", type=int, default=100,
                         help="Number of evaluation episodes")
     parser.add_argument("--start-seed", type=int, default=1000,

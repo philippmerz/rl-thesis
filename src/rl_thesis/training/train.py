@@ -4,7 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from rl_thesis.config.reward_configs import (
+from rl_thesis.config.experiment_configs import (
     make_world_config, make_dqn_config, get_config_names, describe_config,
 )
 from rl_thesis.training.trainer import Trainer

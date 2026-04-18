@@ -33,7 +33,7 @@ Press ESC or close the window to exit. The demo runs 10 episodes.
 python -m rl_thesis.cli train --config engineered_v5 --seed 42
 ```
 
-Available configs live in `src/rl_thesis/config/reward_configs.py`. `engineered_v5` is the minimal 4-component reward; `engineered_v5_fs` adds 4-frame stacking and 5M-step training.
+Available configs live in `src/rl_thesis/config/experiment_configs.py`. `engineered_v5` is the minimal 4-component reward; `engineered_v5_fs` adds 4-frame stacking and 5M-step training.
 
 CLI options:
 

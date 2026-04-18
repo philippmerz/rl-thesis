@@ -41,7 +41,7 @@ def demo(
 def train(
     config: str = typer.Option(
         "baseline", "--config", "-c",
-        help="Reward configuration name",
+        help="Experiment configuration name",
     ),
     seed: int = typer.Option(42, "--seed", "-s", help="Random seed"),
     resume: str = typer.Option(
@@ -82,7 +82,7 @@ def train(
     ),
 ):
     """Train a single (config, seed) run."""
-    from rl_thesis.config.reward_configs import make_dqn_config
+    from rl_thesis.config.experiment_configs import make_dqn_config
     from rl_thesis.training.train import run_single
 
     cli_overrides = {
@@ -133,7 +133,7 @@ def reward_sweep(
         None,
         "--config",
         "-c",
-        help="Specific configs to run (repeatable). Omit for all reward configs.",
+        help="Specific configs to run (repeatable). Omit for all experiment configs.",
     ),
     workers: int | None = typer.Option(
         None,
@@ -178,7 +178,7 @@ def benchmark(
     ),
     config: str = typer.Option(
         None, "--config",
-        help="Reward config name (for world config). Default uses WorldConfig defaults.",
+        help="Experiment config name (for world config). Default uses WorldConfig defaults.",
     ),
     episodes: int = typer.Option(100, "--episodes", "-n", help="Number of episodes"),
     start_seed: int = typer.Option(1000, "--start-seed", help="First episode seed"),
@@ -187,7 +187,7 @@ def benchmark(
     from rl_thesis.training.benchmark import (
         evaluate_heuristic, evaluate_dqn, summarize, compare,
     )
-    from rl_thesis.config.reward_configs import make_world_config as _make
+    from rl_thesis.config.experiment_configs import make_world_config as _make
 
     wc = _make(config) if config else WorldConfig()
     print(f"Evaluating over {episodes} episodes (seeds {start_seed}-{start_seed + episodes - 1})")

@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
-from rl_thesis.config.reward_configs import get_config_names
+from rl_thesis.config.experiment_configs import get_config_names
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -222,7 +222,7 @@ def _worker_loop(
             os.chdir(REPO_ROOT)
             signal.signal(signal.SIGINT, request_shutdown)
 
-            from rl_thesis.config.reward_configs import make_dqn_config
+            from rl_thesis.config.experiment_configs import make_dqn_config
             from rl_thesis.training.train import run_single
 
             gpu_label = gpu_id if gpu_id is not None else "auto"
