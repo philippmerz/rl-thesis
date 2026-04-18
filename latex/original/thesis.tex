@@ -20,7 +20,7 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-We study how reward function design affects learned behavior in a multi-objective survival task. An agent on a $64 \times 64$ grid must eat food to avoid starvation, evade enemies, and use shelters for protection. We train a Rainbow-lite DQN agent under several reward configurations and compare against a scripted heuristic baseline. We document three failure modes that arise from reward weight imbalances and derive seven feasibility constraints that prevent them. A minimal reward function with four components outperforms a nine-component alternative, but no reward configuration matches the heuristic: the agent consistently learns to shelter-camp rather than forage, and scaling the food reward does not resolve this. Adding temporal context through frame stacking, without changing the reward function, produces an agent that significantly outperforms the heuristic (811 vs 768 mean survival, $p = 0.007$). We propose three hypotheses for why reward shaping alone fails and suggest falsification experiments for each.
+We study how reward function design affects learned behavior in a multi-objective survival task. An agent on a $64 \times 64$ grid must eat food to avoid starvation, evade enemies, and use shelters for protection. We train a Rainbow-lite DQN agent under several reward configurations and compare against a scripted heuristic baseline. We document three failure modes (oscillation, food hovering, suicidal enemy-seeking) that arise from reward weight imbalances and derive four design heuristics that rule out two of them through per-step reward budget inequalities. A minimal reward function with four components outperforms a nine-component alternative, but no reward configuration matches the heuristic: the agent consistently learns to shelter-camp rather than forage, and scaling the food reward does not resolve this. Adding temporal context through frame stacking, without changing the reward function, produces an agent that significantly outperforms the heuristic (811 vs 768 mean survival, $p = 0.007$). We propose three hypotheses for why reward shaping alone fails and suggest falsification experiments for each.
 \end{abstract}
 
 \tableofcontents
@@ -33,15 +33,15 @@ We study how reward function design affects learned behavior in a multi-objectiv
 
 Reinforcement learning (RL) has produced agents that match or exceed human performance on complex tasks, from Atari games \citep{Mnih2015} to board games and robotic control. These results typically require large-scale compute. A less studied but equally important problem is the design of the reward function itself.
 
-\citet{Ng1999} proved that potential-based reward shaping preserves the optimal policy. However, in practice, reward functions for complex tasks are rarely potential-based. They combine multiple event-driven components (bonuses for collecting resources, penalties for taking damage, terminal rewards for death) whose relative weighting directly determines what the agent optimizes. Small changes in these weights can produce qualitatively different behaviors.
+Potential-based reward shaping (PBRS) \citep{Ng1999} can accelerate learning under a sparse objective by adding a dense shaping reward derived from a state potential $\Phi(s)$, with the guarantee that the optimal policy is preserved. In practice, however, PBRS sees limited use: its guarantee breaks down under function approximation, designing $\Phi(s)$ requires knowing which states represent progress, difficult in open-ended survival tasks without clear goal states, and the framework restricts all shaping to a single scalar function of state, while practitioners often need event-driven signals that are more naturally expressed as weighted reward components.
 
-Multi-objective environments amplify this problem. A survival task requires balancing resource gathering, which demands exploration, against threat avoidance, which favors conservative behavior. The reward function must encode the relative importance of these objectives. There is no single ``correct'' weighting; the choice reflects a design decision about what behavior is desirable.
+In multi-objective settings, practitioners typically want to \emph{steer} behavior toward a specific balance of competing goals, for instance favoring aggressive foraging over cautious shelter use, or vice versa. This means deliberately defining reward functions that encode different objectives, not preserving a single one. The resulting reward functions combine multiple weighted components whose relative magnitudes directly determine what the agent optimizes. Small changes in these weights can produce qualitatively different behaviors, and there is no single ``correct'' weighting; the choice reflects a design decision about what behavior is desirable.
 
-Most reward shaping research evaluates on single-objective benchmarks (Atari, MuJoCo locomotion) where the reward is given or straightforward to define. Practitioners building agents for multi-objective tasks with competing pressures lack principled guidance: which components to include, how to set their relative weights, and when reward shaping itself is insufficient. This work addresses that gap. We derive feasibility constraints that rule out degenerate reward configurations, show empirically that reward complexity can be counterproductive, and identify a case where the bottleneck is not the reward function but the observation: no reward configuration induces foraging, while a change to the observation (frame stacking) does.
+Most reward shaping research evaluates on single-objective benchmarks (Atari, MuJoCo locomotion) where the reward is given or straightforward to define. Practitioners building agents for multi-objective tasks with competing pressures lack principled guidance: which components to include, how to set their relative weights, and when reward shaping itself is insufficient. This work addresses that gap. We derive design heuristics that rule out two specific degenerate configurations, show empirically that reward complexity can be counterproductive, and identify a case where the bottleneck is not the reward function but the observation: no reward configuration induces foraging, while a change to the observation (frame stacking) does.
 
 This work presents a systematic study of reward shaping in a custom grid-based survival environment. The environment features a single agent on a $64 \times 64$ grid that must eat food to prevent starvation, avoid enemies that deal damage, and use shelters for protection. The reward function consists of up to twelve weighted components covering event-driven bonuses, continuous penalties, and spatial gradients. We vary these weights across experiments while holding the agent architecture fixed, isolating the effect of reward configuration on learned behavior.
 
-The agent is a Rainbow-lite DQN \citep{Hessel2018} combining Double DQN, a Dueling architecture, prioritized experience replay with 5-step returns, and several stability techniques (LayerNorm, AdamW, Polyak target updates). Training runs on single consumer GPUs, following work by \citet{ObandoCeron2021} and \citet{Clark2024} demonstrating that algorithmic choices can substitute for massive compute.
+The agent is a Rainbow-lite DQN \citep{Hessel2018} combining Double DQN, a Dueling architecture, prioritized experience replay, and 3-step returns, along with several stability techniques (LayerNorm, AdamW, Polyak target updates). Training runs on single consumer hardware, following work by \citet{ObandoCeron2021}, \citet{Schwarzer2023}, \citet{ObandoCeron2024}, and \citet{Clark2024} demonstrating that algorithmic choices can substitute for massive compute.
 
 Section~\ref{sec:background} reviews the relevant background. Section~\ref{sec:environment} describes the survival environment. Section~\ref{sec:architecture} details the agent architecture. Section~\ref{sec:experiments} presents the experiments and results. Sections~\ref{sec:discussion} and~\ref{sec:conclusion} discuss findings and conclude.
 
@@ -118,12 +118,12 @@ This propagates reward information faster at the cost of increased variance. Mod
 
 \paragraph{Rainbow.} \citet{Hessel2018} combined six DQN extensions into a single agent: Double DQN, Dueling, PER, multi-step returns, distributional RL (C51), and NoisyNet. An ablation study showed that each component contributes, with prioritized replay and multi-step returns providing the largest individual gains.
 
-We adopt four of these six components: Double DQN, Dueling, PER, and 5-step returns. We omit distributional RL due to implementation complexity and NoisyNet because $\varepsilon$-greedy exploration is sufficient at smaller scales \citep{ObandoCeron2021, Fortunato2018}.
+We adopt four of these six components: Double DQN, Dueling, PER, and 3-step returns. We omit distributional RL due to implementation complexity and NoisyNet because $\varepsilon$-greedy exploration is sufficient at smaller scales \citep{ObandoCeron2021, Fortunato2018}.
 
 \subsection{Training Stability Techniques}
 \label{sec:stability}
 
-\paragraph{Polyak soft target updates.} The original DQN copies $\theta$ to $\theta^-$ every $C$ steps, creating discontinuities in the targets. Polyak averaging \citep{Lillicrap2016} replaces the hard copy with an exponential moving average, updating the target at every step:
+\paragraph{Polyak soft target updates.} The original DQN copies $\theta$ to $\theta^-$ every $C$ steps, creating discontinuities in the targets. Polyak averaging \citep{Polyak1992, Lillicrap2016} replaces the hard copy with an exponential moving average, updating the target at every step:
 \begin{equation}
 \theta^- \leftarrow (1 - \tau)\,\theta^- + \tau\,\theta,
 \end{equation}
@@ -135,16 +135,12 @@ with a small $\tau$. This produces smoother target evolution and removes the nee
 
 \paragraph{Learning rate scheduling.} The 1cycle policy \citep{Smith2019} ramps the learning rate from a low value to a peak over a short warmup phase, then cosine-anneals it back down. This provides implicit regularization and can accelerate convergence compared to a fixed learning rate.
 
-\paragraph{Plasticity.} Neural networks in RL can lose the ability to learn over extended training \citep{Lyle2023, Dohare2024}. Weight decay and normalization are effective countermeasures. Our combination of AdamW, LayerNorm, and learning rate annealing addresses this concern.
+\paragraph{Plasticity.} Neural networks in RL can lose the ability to learn over extended training \citep{Lyle2023, Dohare2024}. Weight decay and normalization are effective countermeasures \citep{Bjorck2021}. Our combination of AdamW, LayerNorm, and learning rate annealing addresses this concern.
 
 \subsection{Reward Shaping}
 \label{sec:reward_shaping_bg}
 
-\citet{Ng1999} proved that adding a potential-based shaping reward $F(s, s') = \gamma\,\Phi(s') - \Phi(s)$ to the environment reward preserves the set of optimal policies. This result applies to shaping rewards derived from a fixed potential function of the state.
-
-Practical reward functions often deviate from this framework. Event-driven bonuses (eating food, taking damage) and threshold-based penalties (hunger warnings) are not derived from a state potential. When multiple such components are combined with different weights, the effective optimization objective changes. The agent maximizes the weighted sum, which may not correspond to any single intended behavior. This kind of mismatch between the specified reward and the behavior the designer actually wants is commonly described as reward hacking \citep{Amodei2016}.
-
-In a survival setting, this creates a tension. A high food reward produces aggressive foraging at the cost of safety. A high death penalty produces shelter-seeking at the cost of starvation. A high shelter reward produces passive camping. The interaction between these components, not just their individual magnitudes, determines the learned policy.
+When multiple reward components are combined with different weights, the agent maximizes the weighted sum, which may not correspond to any single intended behavior. This kind of mismatch is commonly described as reward hacking \citep{Amodei2016}. In a survival setting, it creates a tension: a high food reward produces aggressive foraging at the cost of safety, a high death penalty produces shelter-seeking at the cost of starvation, and a high shelter reward produces passive camping. The interaction between these components, not just their individual magnitudes, determines the learned policy.
 
 This interaction is the central object of study. We fix the agent and vary only the reward weights to isolate their effect on behavior.
 
@@ -153,11 +149,13 @@ This interaction is the central object of study. We fix the agent and vary only 
 \label{sec:environment}
 % =============================================================================
 
+Grid-based environments are a common testbed for reinforcement learning, from safety-focused gridworlds \citep{Leike2017} to the modular Minigrid framework \citep{ChevalierBoisvert2023}. Our environment extends this tradition with a multi-objective survival task that foregrounds the reward design problem.
+
 \subsection{World Design}
 
 The environment is a $64 \times 64$ bounded grid with discrete time steps. Each episode runs for at most 1000 steps or until the agent dies (health reaches zero). The world contains four entity types.
 
-\paragraph{Agent.} A single agent with two resource bars: health $h$ and hunger $u$, both with maximum value $h_{max}=u_{max}=100$. The agent spawns at the grid center with both bars full. Hunger depletes by 0.2 per tick and by an additional 0.5 when moving. When hunger reaches zero, the agent starves and loses 0.5 health per tick. When hunger exceeds 30\% of maximum, health regenerates at 0.5 per tick up to the cap.
+\paragraph{Agent.} A single agent with two resource bars: health $h$ and hunger $u$, both with maximum value $h_{\max}=u_{\max}=100$. The agent spawns at the grid center with both bars full. Hunger depletes by 0.2 per tick and by an additional 0.5 when moving. When hunger reaches zero, the agent starves and loses 0.5 health per tick. When hunger exceeds 30\% of maximum, health regenerates at 0.5 per tick up to the cap.
 
 \paragraph{Enemies.} Mobile entities that deal 15 damage on contact (Manhattan distance $\leq 1$). Each tick, an enemy moves with probability 0.5. Within a vision range of 3 (Manhattan distance), enemies pursue the agent along the axis of greatest distance. Outside this range, they move randomly. Enemies cannot enter shelter tiles or tiles occupied by another enemy. The world supports up to 8 enemies simultaneously, with roughly a third of this capacity present at episode start. New enemies appear with probability 0.01 per tick.
 
@@ -241,9 +239,6 @@ These components create competing pressures. Collecting food requires movement, 
 
 A subtle design consideration is the relative magnitude of continuous per-tick rewards versus sparse event rewards. A per-tick reward of $+0.1$ accumulated over a 700-step episode produces $+70$, which can dominate a food reward of $+5.0$. This creates incentives for passive survival: the agent learns to avoid risk rather than seek food. Similarly, a food proximity reward that is too large relative to the food-eaten reward incentivizes hovering near food without eating it, since eating removes the food and terminates the proximity stream. These failure modes motivate the experimental configurations in Section~\ref{sec:experiments}.
 
-\paragraph{Relation to potential-based shaping.}
-The delta proximity terms satisfy the PBRS conditions of \citet{Ng1999} and therefore preserve the set of optimal policies under the base reward. The remaining components (event-driven bonuses, threshold penalties, proportional penalties) are not derived from a state potential. When multiple such components are combined with different weights, the effective optimization objective changes. The agent maximizes the weighted sum, which may not correspond to any single intended behavior. This kind of mismatch between the specified reward and the behavior the designer actually wants is commonly described as reward hacking \citep{Amodei2016}.
-
 These weights are the primary independent variable in our experiments.
 
 % =============================================================================
@@ -294,7 +289,7 @@ Algorithm~\ref{alg:training} summarizes the training procedure.
 \end{algorithmic}
 \end{algorithm}
 Here, $d_i \in \{0,1\}$ indicates whether sampled transition $i$ is terminal, and $B$ denotes the batch size.
-\paragraph{Experience collection.} At each step, the transition $(s_t, a_t, r_t, s_{t+1}, d_t)$ enters an $n$-step accumulator. Once $n = 5$ transitions have accumulated, the oldest is committed to the replay buffer with the $n$-step return (Equation~\ref{eq:nstep}), bootstrap state $s_{t+n}$, and discount factor $\gamma^n$. At episode termination (agent death), remaining entries are flushed with shortened returns. On episode truncation (time limit), pending entries are discarded to prevent cross-episode contamination of $n$-step returns.
+\paragraph{Experience collection.} At each step, the transition $(s_t, a_t, r_t, s_{t+1}, d_t)$ enters an $n$-step accumulator. Once $n = 3$ transitions have accumulated, the oldest is committed to the replay buffer with return $R_t^{(3)} = r_t + \gamma r_{t+1} + \gamma^2 r_{t+2}$, bootstrap state $s_{t+3}$, and discount factor $\gamma^3$. At episode termination (agent death), remaining entries are flushed with shortened returns. On episode truncation (time limit), pending entries are discarded to prevent cross-episode contamination of $n$-step returns.
 
 The distinction between termination and truncation matters for the bootstrap target. A terminated episode (death) sets $d = 1$, zeroing the bootstrap term. A truncated episode sets $d = 0$, allowing bootstrapping from the final state since the agent was still alive.
 
@@ -302,7 +297,7 @@ The distinction between termination and truncation matters for the bootstrap tar
 
 \paragraph{Optimization.} AdamW with decoupled weight decay ($10^{-4}$) on convolutional and linear weights; bias and normalization parameters are exempt. Gradients are clipped to norm 1.0. The learning rate follows a 1cycle schedule: 5\% warmup from $10^{-5}$ to $10^{-4}$, then cosine annealing to $10^{-6}$.
 
-\paragraph{Exploration.} $\varepsilon$-greedy with linear decay from 1.0 to 0.01 over the first half of training.
+\paragraph{Exploration.} $\varepsilon$-greedy with linear decay from 1.0 to 0.05 over the first half of training. The relatively high final $\varepsilon$ ensures continued exploration in the stochastic environment.
 
 \subsection{Hyperparameters}
 \label{sec:hyperparameters}
@@ -330,13 +325,13 @@ Min.\ buffer size (warmup)  & 10{,}000          & \citet{Mnih2015} \\
 PER $\alpha$                & 0.6               & \citet{Schaul2016} \\
 PER $\beta_0$               & 0.4               & \citet{Schaul2016} \\
 $\beta$ annealing steps     & $T/2$             & \\
-$n$-step returns            & 5                 & \citet{Hessel2018} \\
+$n$-step returns            & 3                 & \citet{Hessel2018} \\
 \midrule
 \multicolumn{3}{l}{\textit{Target network}} \\
 Polyak $\tau$               & 0.005             & \citet{Lillicrap2016} \\
 \midrule
 \multicolumn{3}{l}{\textit{Exploration}} \\
-$\varepsilon$ start / end   & 1.0 / 0.01        & \citet{Mnih2015} \\
+$\varepsilon$ start / end   & 1.0 / 0.05        & \citet{Mnih2015} \\
 $\varepsilon$ decay steps   & $T/2$             & \\
 \midrule
 \multicolumn{3}{l}{\textit{Network}} \\
@@ -360,50 +355,43 @@ Eval episodes               & 10                & \\
 
 \subsection{Experimental Setup}
 
-Each configuration trains for $T = 2{,}000{,}000$ timesteps on a single consumer GPU (RTX 3060/4070 class). Greedy evaluation (20 episodes, $\varepsilon = 0$) runs every 5{,}000 steps during training. Final benchmarks evaluate the best checkpoint over 100 episodes with fixed seeds (1000--1099). We report four behavioral metrics: mean survival time (ticks), mean food eaten, mean damage taken, and death rate. Each configuration runs with 3 random seeds for variance estimation. The agent architecture and all hyperparameters (Table~\ref{tab:hyperparams}) are held constant across reward shaping experiments.
+Each configuration trains for $T = 2{,}000{,}000$ timesteps (roughly 8 hours on consumer hardware). Greedy evaluation (20 episodes, $\varepsilon = 0$) runs every 5{,}000 steps during training. Final benchmarks evaluate the best checkpoint over 100 episodes with fixed seeds (1000--1099). We report four behavioral metrics: mean survival time (ticks), mean food eaten, mean damage taken, and death rate. Each configuration runs with 3 random seeds for variance estimation. The agent architecture and all hyperparameters (Table~\ref{tab:hyperparams}) are held constant across reward shaping experiments.
 
 \paragraph{Heuristic baseline.} A scripted agent provides a reference for non-learned behavior. The heuristic camps in the nearest shelter and leaves only when the hunger ratio drops below 0.5, at which point it moves toward the nearest food. It flees from enemies within Manhattan distance 5. Over 100 evaluation episodes, this agent survives 768 steps on average, eats 1.19 food items per episode, and dies in 95\% of episodes. The remaining 5\% reach the 1000-step time limit.
 
 \subsection{Failure Modes}
 \label{sec:failure_modes}
 
-Early experiments revealed three degenerate policies that emerged reliably under certain reward configurations.
+Early experiments revealed three degenerate policies that emerged reliably under certain reward configurations. These modes are not mutually exclusive: all three appeared within a single baseline training run at different stages and in different episodes, with the agent alternating between hovering near food, seeking enemies, and oscillating in place depending on the local state distribution.
 
-\paragraph{Oscillation (C3 violation).} The agent alternates between two adjacent cells indefinitely. This occurs when a per-tick survival reward provides sufficient return through passivity. With $w_\text{tick} = 0.1$ and $\gamma = 0.99$, the discounted return from oscillating for 700 ticks until starvation death is approximately $+9.9$, while the death penalty discounted to $t = 700$ contributes only $-0.13$. The agent has found the true optimal policy for this reward function: collect ticks while avoiding risk. Constraint C3 prevents this by requiring that passive returns remain negative.
+\paragraph{Oscillation.} The agent remains passive or oscillates between adjacent cells. This behavior was observed under several reward configurations and its precise cause requires further investigation. One hypothesis is that a per-tick survival reward can make passivity rational: with $w_\text{tick} = 0.1$ and $\gamma = 0.99$, a stationary agent surviving 700 ticks earns $\approx +10.0$ from tick rewards while the death penalty discounted to $t = 700$ contributes only $-10 \times 0.99^{700} \approx -0.009$. However, oscillation also appeared in configurations without a tick reward, suggesting additional contributing factors such as training dynamics or exploration failures.
 
-\paragraph{Food hovering (C2 violation).} The agent moves near food but does not eat it. This occurs when the food proximity reward exceeds the hunger penalty. An agent 5 cells from food with $w_\text{prox} = 0.5$ earns $+0.33$ per tick from proximity, while the average hunger penalty is $-0.15$ per tick, yielding a positive net reward for inaction. Eating the food would remove the proximity stream. Constraint C2 prevents this by bounding $w_\text{prox}$ below $|w_\text{hprop}|/2$.
+\paragraph{Food hovering.} The agent moves near food but does not eat it. This occurs when the food proximity reward exceeds the hunger penalty. An agent 5 cells from food with $w_\text{prox} = 0.5$ earns $+0.33$ per tick from proximity, while the average hunger penalty is $-0.15$ per tick, yielding a positive net reward for inaction. Eating the food would remove the proximity stream. Heuristic H2 addresses this by bounding $w_\text{prox}$ below $|w_\text{hprop}|/2$.
 
-\paragraph{Suicide (C1 violation).} When the proximity gradient is too weak to guide the agent toward food (C1 violated), the agent cannot learn to forage. Without foraging, every tick accumulates hunger-proportional penalty. A stationary agent surviving 700 ticks until starvation accumulates approximately $-135$ from $w_\text{hprop}$ and $-100$ from $w_\text{sdm}$, totaling $-245$ before the death penalty. The agent discovers that dying quickly is preferable: seeking enemies yields a fast death at total cost $\approx -24$ (a few enemy hits plus the death penalty), roughly 10$\times$ less than slow starvation. This is a rational response to a reward function where living is more expensive than dying.
+\paragraph{Suicide.} When the proximity gradient is too weak to guide the agent toward food, the agent cannot learn to forage. Without foraging, every tick accumulates hunger-proportional penalty. A stationary agent surviving 700 ticks until starvation accumulates approximately $-135$ from $w_\text{hprop}$ and $-100$ from $w_\text{sdm}$, totaling $-235$ before the death penalty. The agent discovers that dying quickly is preferable: seeking enemies yields a fast death at total cost $\approx -24$ (a few enemy hits plus the death penalty), roughly 10$\times$ less than slow starvation. This is a rational response to a reward function where living is more expensive than dying.
 
-All three failure modes are instances of reward hacking~\citep{Amodei2016}: the agent optimizes the reward function as specified, but the resulting behavior diverges from the designer's intent. They motivate the feasibility constraints derived in Section~\ref{sec:reward_configs}.
+The food hovering and suicide failure modes are clear instances of reward hacking~\citep{Amodei2016}: the agent optimizes the reward function as specified, but the resulting behavior diverges from the designer's intent. The cause of oscillation is less certain and requires further investigation. These failure modes motivate the design heuristics derived in Section~\ref{sec:reward_configs}.
 
 \subsection{Reward Configurations}
 \label{sec:reward_configs}
 
-The failure modes above show that poorly chosen reward weights produce degenerate policies. To turn this observation into a principled design tool, we derive seven feasibility constraints (C1--C7) from the environment mechanics. A reward configuration is \emph{feasible} if all seven hold simultaneously.
+The failure modes above show that poorly chosen reward weights produce degenerate policies. Based on the per-step reward dynamics, we propose four design heuristics (H1--H4) that help avoid the food hovering and suicide failure modes. These compare quantities at the same timestep, so discounting does not affect them.
 
-Let $D = 2 r_\text{obs}$ denote the observation diameter. The constraints are:
-\begin{enumerate}[label=\textbf{C\arabic*},nosep,leftmargin=2.5em]
+Let $D = 2 r_\text{obs}$ denote the observation diameter, $c$ the per-step movement hunger cost, $d_e$ the enemy contact damage, and $h_s$ the per-tick starvation damage.
+\begin{enumerate}[label=\textbf{H\arabic*},nosep,leftmargin=2.5em]
   \item \emph{Anti-stasis.} One step toward food must yield more proximity reward than the hunger penalty from the movement cost:
     $w_\text{prox} > |w_\text{hprop}| \cdot c \cdot (D+1) \,/\, u_\text{max}$.
   \item \emph{Anti-hovering.} Maximum proximity reward must not exceed the average hunger penalty:
     $w_\text{prox} < |w_\text{hprop}| / 2$.
-  \item \emph{Anti-passivity.} Total tick reward over a passive episode must not exceed accumulated penalties:
-    $w_\text{tick} < (|w_\text{hprop}| \Sigma_h + |w_\text{sdm}| h_s T_\text{death} + |w_\text{death}|) \,/\, T_\text{passive}$,
-    where $\Sigma_h$ is the cumulative hunger ratio over a stationary episode.
   \item \emph{Enemy flee.} Damage penalty from one hit must exceed the hunger penalty from one evasive step:
     $|w_\text{edm}| \cdot d_e > |w_\text{hprop}| \cdot c \,/\, u_\text{max}$.
   \item \emph{Starvation escalation.} Per-tick penalty when starving must exceed the max hunger-proportional penalty:
     $|w_\text{sdm}| \cdot h_s > |w_\text{hprop}|$.
-  \item \emph{Terminal signal.} Death penalty must exceed the best single event:
-    $|w_\text{death}| > w_\text{food}$.
-  \item \emph{Food trip.} Reaching food at expected distance $\bar{d}$ must be worth the movement cost:
-    $f > \bar{d} \cdot c$.
 \end{enumerate}
 
-Each failure mode in Section~\ref{sec:failure_modes} maps to a specific constraint violation: oscillation to C3, food hovering to C2, and suicide to C1.
+The food hovering failure mode maps to an H2 violation and the suicide failure mode to an H1 violation.
 
-Table~\ref{tab:reward_configs} defines the diagnostic configurations. The \textsc{baseline} satisfies all constraints. Each diagnostic configuration violates a specific constraint or tests a limiting case.
+Table~\ref{tab:reward_configs} defines the diagnostic configurations. The \textsc{baseline} satisfies all four heuristics. The three diagnostic configurations each test a specific aspect of the reward function.
 
 \begin{table}[h]
 \centering
@@ -412,31 +400,28 @@ Table~\ref{tab:reward_configs} defines the diagnostic configurations. The \texts
 \small
 \begin{tabular}{llr}
 \toprule
-Configuration & Modification & Violated constraint \\
+Configuration & Modification & Purpose \\
 \midrule
-\textsc{baseline}        & (none --- default weights)              & (none) \\
-\textsc{weak\_proximity} & $w_\text{prox} = 0.02$                  & C1 (anti-stasis) \\
-\textsc{no\_death}       & $w_\text{death} = 0$                    & C6 (terminal signal) \\
-\textsc{death\_only}     & all weights zero except $w_\text{death}$ & sparse signal \\
-\textsc{free\_movement}  & movement cost $c = 0.0$                 & diagnostic \\
+\textsc{baseline}        & (none --- default weights)              & all heuristics satisfied \\
+\textsc{weak\_proximity} & $w_\text{prox} = 0.02$                  & violates H1 (anti-stasis) \\
+\textsc{no\_death}       & $w_\text{death} = 0$                    & no terminal signal \\
+\textsc{death\_only}     & all weights zero except $w_\text{death}$ & sparse signal only \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Baseline.} The default weights (Table~\ref{tab:default_rewards}) satisfy all seven constraints. Zero survival tick eliminates passive reward, strong hunger-proportional penalty ($-0.3$) creates urgency, and the food proximity gradient ($+0.1$) provides a directional signal without dominating the reward budget. This is the primary configuration expected to produce active foraging.
+\paragraph{Baseline.} The default weights (Table~\ref{tab:default_rewards}) satisfy all four heuristics. Zero survival tick eliminates passive reward, strong hunger-proportional penalty ($-0.3$) creates urgency, and the food proximity gradient ($+0.1$) provides a directional signal without dominating the reward budget. This is the primary configuration expected to produce active foraging.
 
-\paragraph{Weak proximity.} Reduces $w_\text{prox}$ from $0.1$ to $0.02$, violating C1: the proximity gain from one step toward food ($0.02$) falls below the hunger penalty from the movement cost ($|w_\text{hprop}| \cdot c \cdot (D+1) / u_\text{max} = 0.0225$). Without a viable foraging strategy, the agent converges to the suicide failure mode: seeking enemies to die quickly or oscillating to accelerate starvation, both of which truncate the accumulating hunger penalty.
+\paragraph{Weak proximity.} Reduces $w_\text{prox}$ from $0.1$ to $0.02$, violating H1: the proximity gain from one step toward food ($0.02$) falls below the hunger penalty from the movement cost ($|w_\text{hprop}| \cdot c \cdot (D+1) / u_\text{max} = 0.0225$). Without a viable foraging strategy, the agent converges to the suicide failure mode: seeking enemies to die quickly or oscillating to accelerate starvation, both of which truncate the accumulating hunger penalty.
 
-\paragraph{No death.} Removes the death penalty ($w_\text{death} = 0$), violating C6. All per-step shaping signals remain. Tests whether TD bootstrapping of a terminal signal is necessary for learning survival, or whether the accumulated per-step penalties (hunger, starvation damage, enemy damage) are sufficient on their own.
+\paragraph{No death.} Removes the death penalty ($w_\text{death} = 0$). All per-step shaping signals remain. Tests whether a terminal signal is necessary for learning survival, or whether the accumulated per-step penalties (hunger, starvation damage, enemy damage) are sufficient on their own.
 
 \paragraph{Death only.} Removes all per-step rewards, leaving only the terminal death penalty ($w_\text{death} = -10$). The agent receives zero signal until the episode ends in death. This is the sparsest possible reward for the survival task and tests the credit assignment limit: can the agent attribute a death at $t = 700$ to actions taken hundreds of steps earlier, with no intermediate gradient?
-
-\paragraph{Free movement.} Sets the movement hunger cost to zero while keeping all reward weights at baseline values. If the agent still oscillates under this configuration, oscillation is a training artifact rather than a reward-rational strategy, since the reward incentive to move toward food is unambiguously positive.
 
 \subsection{Reward Engineering}
 \label{sec:engineered}
 
-The diagnostic configurations confirm that constraint violations produce predictable failures. The next question is whether a carefully designed reward function can match the heuristic. The design process identified two key insights: a structural incompatibility in the baseline, and the counterproductive effect of reward complexity.
+The diagnostic configurations confirm that heuristic violations produce predictable failures. The next question is whether a carefully designed reward function can match the heuristic. The design process identified two key insights: a structural incompatibility in the baseline, and the counterproductive effect of reward complexity.
 
 \paragraph{Structural incompatibility of the hunger-proportional penalty.}
 The baseline reward includes a continuous hunger-proportional penalty $w_\text{hprop}(1-u_t) = -0.3(1-u_t)$. Every movement costs $c = 0.5$ hunger, triggering an incremental penalty of $|w_\text{hprop}| \cdot c / u_\text{max} = 0.0015$ per step. At $\gamma = 0.99$, the present value of this penalty stream over the expected remaining episode is
@@ -470,7 +455,7 @@ Death ($w_\text{death}$)             & Terminal                              & $
 
 This configuration removes all event-driven rewards, threshold penalties, and binary signals. The hypothesis is that fewer signals reduce interference in Q-value estimation. The three proximity gradients encode the behavioral mode switch directly, and the death penalty provides a terminal signal for TD bootstrapping.
 
-Note that this minimal configuration renders most of the feasibility constraints (C1, C2, C4, C5) vacuous, since they involve $w_\text{hprop}$ which is zero. The constraints were useful as analytical tools that guided the design away from degenerate weight combinations, not as active bounds on the final configuration.
+Note that this minimal configuration renders all four heuristics (H1--H4) vacuous, since they involve $w_\text{hprop}$ which is zero. The heuristics were useful as analytical tools that guided the design away from degenerate weight combinations, not as active bounds on the final configuration.
 
 \paragraph{The foraging gap.}
 E5 learns coherent shelter and flee behavior but barely forages: 0.66 food per episode versus the heuristic's 1.19. The survival gap of 54 ticks corresponds to the food deficit: roughly 0.6 fewer food items at approximately 100 ticks of additional life per item.
@@ -480,7 +465,9 @@ We tested explicit food rewards ($w_\text{food}$) at magnitudes from 0.3 to 5.0.
 \subsection{Temporal Context}
 \label{sec:temporal}
 
-Frame stacking provides temporal context by concatenating the spatial grids from the last $k$ time steps. The base observation has 3 spatial channels on a $15 \times 15$ grid; a 4-frame stack provides 12 channels. An enemy occupying different cells across consecutive frames reveals its direction and speed. The scalar features (health, hunger, shelter indicator) are taken from the current step only.
+Frame stacking provides temporal context by concatenating the spatial grids from the last $k$ time steps. The base observation has 3 spatial channels on a $15 \times 15$ grid; a 4-frame stack provides 12 channels. An enemy occupying different cells across consecutive frames reveals its direction and speed. The scalar features (health, hunger, shelter indicator) are taken from the current step only, since they already reflect the agent's cumulative state.
+
+\paragraph{Effect on the state representation.} The single-frame observation space has dimension $|O_1| = 3 \cdot 15 \cdot 15 + 3 = 678$. With $k$-frame stacking, the spatial portion grows by a factor of $k$ while the scalars are unchanged: $|O_k| = 3k \cdot 15 \cdot 15 + 3$. For $k = 4$ this gives $|O_4| = 2703$, a factor of 3.99 increase in observation dimension. The number of distinguishable states the agent can condition its policy on grows roughly as $|S|^k$ in principle, since a history of $k$ frames distinguishes trajectories that collide in the single-frame representation. In practice the growth is smaller because most 4-tuples of consecutive grids are not reachable under the environment dynamics, but the agent gains access to derived quantities (velocity, approach direction) that were previously invisible.
 
 We train E5 with $k = 4$ frames for 5{,}000{,}000 steps. The replay buffer is reduced from 1{,}000{,}000 to 250{,}000 transitions to accommodate the larger observation size. All other hyperparameters follow Table~\ref{tab:hyperparams} except for slower target updates ($\tau = 0.002$) and extended exploration ($\varepsilon$ decay over 1{,}000{,}000 steps).
 
@@ -537,7 +524,7 @@ Absolute proximity would reward the agent for being near food, creating the hove
 The results raise two questions: why does the agent not learn to forage under reward shaping alone, and why does frame stacking enable it? We propose three hypotheses, each with a suggested falsification test.
 
 \paragraph{Reward design as constrained optimization.}
-The feasibility constraints C1--C7 formalize reward design as a system of inequalities. Satisfying all constraints is necessary but not sufficient: the baseline satisfies all seven yet fails due to the structural incompatibility between hunger-proportional penalty and movement cost. The progression from E4 to E5 shows that removing harmful signals is more effective than adding informative ones. The constraints rule out degenerate policies but do not guarantee the intended behavior.
+The design heuristics H1--H4 formalize per-step reward dynamics as inequalities over the weight vector. Satisfying all heuristics is necessary but not sufficient: the baseline satisfies all four yet fails due to the structural incompatibility between hunger-proportional penalty and movement cost. The progression from E4 to E5 shows that removing harmful signals is more effective than adding informative ones. The heuristics rule out two specific degenerate policies (hovering, suicide) but do not guarantee the intended behavior.
 
 \paragraph{H1: State aliasing.}
 The single-frame observation maps distinct situations to identical representations. A food tile near an enemy looks the same regardless of whether the enemy is approaching or retreating. The Q-network must assign a single value to both cases, which may average out the foraging benefit. Frame stacking resolves this by making enemy trajectories visible, allowing the network to distinguish safe from dangerous foraging states. \emph{Falsification:} freeze enemies in place (remove the trajectory dimension) and retrain with frame stacking. If frame stacking still outperforms single-frame, the advantage is not primarily from trajectory detection, and this hypothesis is wrong.
@@ -556,12 +543,14 @@ The frame-stacking agent's foraging policy is transient. It peaks early in train
 \paragraph{Limitations.}
 The frame-stacking result relies on early checkpoint selection. The environment is a single grid world, and the findings may not generalize to continuous-action domains or tasks with different time scales.
 
+We did not run an architecture grid over network depth, width, or CNN kernel sizes. With roughly 8 hours per 2M-step run and 3 seeds per configuration, even a modest grid of 10 architecture variants would cost on the order of 240 training hours per reward configuration. Because this work isolates reward shaping, architecture was held fixed at values from the literature and the saved compute budget was spent on the reward and frame-stacking comparisons instead. A targeted architecture search could improve absolute numbers but would not change the qualitative findings: the minimal reward beats richer alternatives, and frame stacking beats all of them.
+
 % =============================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 % =============================================================================
 
-We studied how reward function design affects learned behavior in a multi-objective survival task. By varying reward weights while holding the agent fixed, we identified three failure modes and derived seven feasibility constraints that prevent them. A minimal configuration with four components outperforms alternatives with up to nine.
+We studied how reward function design affects learned behavior in a multi-objective survival task. By varying reward weights while holding the agent fixed, we identified three failure modes and derived four design heuristics that characterize the reward regime in which the hovering and suicide modes are avoided. A minimal configuration with four components outperforms alternatives with up to nine.
 
 Reward shaping alone does not match a scripted heuristic in our experiments. No tested food reward magnitude closes the foraging gap: large values degrade enemy avoidance, small values fail to change behavior, and extended training reinforces shelter-camping rather than discovering foraging.
 

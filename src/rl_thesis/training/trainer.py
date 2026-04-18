@@ -261,6 +261,12 @@ class Trainer:
                 if self.on_checkpoint:
                     self.on_checkpoint(step, checkpoint_path)
 
+            # Periodic head reset (Nikishin 2022) to counter primacy bias
+            reset_freq = self.dqn_config.head_reset_freq
+            if reset_freq > 0 and step > 0 and step % reset_freq == 0:
+                self.agent.reset_head()
+                pbar.write(f"[step {step}] Reset Dueling head weights")
+
             if step > 0 and step % self.dqn_config.eval_freq == 0:
                 self.metrics.log_system(
                     step=step,
