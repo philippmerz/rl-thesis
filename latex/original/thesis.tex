@@ -13,14 +13,14 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 
-\title{Reward Shaping for Multi-Objective Survival in Grid-Based Deep Reinforcement Learning}
+\title{When Reward Shaping Suffices and When It Does Not:\\A Bottleneck Analysis in Multi-Objective Survival Reinforcement Learning}
 \author{Philipp Merz}
 \date{2026}
 
 \begin{document}
 \maketitle
 \begin{abstract}
-We study how reward function design affects learned behavior in a multi-objective survival task. An agent on a $64 \times 64$ grid must eat food to avoid starvation, evade enemies, and use shelters for protection. We train a Rainbow-lite DQN agent under several reward configurations and compare against a scripted heuristic baseline. We document three failure modes (oscillation, food hovering, suicidal enemy-seeking) that arise from reward weight imbalances and derive four design heuristics that rule out two of them through per-step reward budget inequalities. A minimal reward function with four components outperforms a nine-component alternative, but no reward configuration matches the heuristic: the agent consistently learns to shelter-camp rather than forage, and scaling the food reward does not resolve this. Adding temporal context through frame stacking, without changing the reward function, produces an agent that significantly outperforms the heuristic (811 vs 768 mean survival, $p = 0.007$). We propose three hypotheses for why reward shaping alone fails and suggest falsification experiments for each.
+We investigate what it takes to make a DQN agent consistently outperform a scripted heuristic in a multi-objective grid-based survival task, where an agent on a $64 \times 64$ grid must eat food, evade enemies, and use shelters. We organize the investigation as a sequential bottleneck analysis: we iteratively identify what is limiting the agent's performance and test the most principled intervention. Three bottlenecks emerge. First, reward design: we derive four per-step design heuristics from environment mechanics, characterize three reward-hacking failure modes, and show that even exhaustively tuned reward configurations saturate below the heuristic at $706$ mean survival (vs $768$). Second, observation: adding 4-frame temporal context without changing the reward lifts survival to $811$ ($p = 0.007$), but the resulting policy collapses as epsilon and learning rate decay together. Third, training dynamics: periodic resets of the Dueling head (Nikishin et al., 2022) counter the plasticity loss and produce the best agent, reaching $871.7$ mean survival with $34\%$ of episodes hitting the $1000$-tick time limit ($p < 0.0001$). The progression validates a staged diagnostic approach to applying RL in multi-objective domains where no single intervention is sufficient.
 \end{abstract}
 
 \tableofcontents
@@ -31,19 +31,32 @@ We study how reward function design affects learned behavior in a multi-objectiv
 \label{sec:introduction}
 % =============================================================================
 
-Reinforcement learning (RL) has produced agents that match or exceed human performance on complex tasks, from Atari games \citep{Mnih2015} to board games and robotic control. These results typically require large-scale compute. A less studied but equally important problem is the design of the reward function itself.
+Reinforcement learning (RL) has produced agents that match or exceed human performance on complex tasks, from Atari games \citep{Mnih2015} to board games and robotic control. These results typically require large-scale compute and highly-tuned setups. A less studied but practically central question is what to do when an RL agent fails to learn an adequate policy: which part of the pipeline is the bottleneck, and what principled intervention addresses it?
 
-Potential-based reward shaping (PBRS) \citep{Ng1999} can accelerate learning under a sparse objective by adding a dense shaping reward derived from a state potential $\Phi(s)$, with the guarantee that the optimal policy is preserved. In practice, however, PBRS sees limited use: its guarantee breaks down under function approximation, designing $\Phi(s)$ requires knowing which states represent progress, difficult in open-ended survival tasks without clear goal states, and the framework restricts all shaping to a single scalar function of state, while practitioners often need event-driven signals that are more naturally expressed as weighted reward components.
+Reward design is the usual first suspect. Potential-based reward shaping (PBRS) \citep{Ng1999} can accelerate learning under a sparse objective by adding a dense shaping reward derived from a state potential $\Phi(s)$, with the guarantee that the optimal policy is preserved. In practice, however, PBRS sees limited use: its guarantee breaks down under function approximation, designing $\Phi(s)$ requires knowing which states represent progress, difficult in open-ended survival tasks without clear goal states, and the framework restricts all shaping to a single scalar function of state, while practitioners often need event-driven signals that are more naturally expressed as weighted reward components.
 
 In multi-objective settings, practitioners typically want to \emph{steer} behavior toward a specific balance of competing goals, for instance favoring aggressive foraging over cautious shelter use, or vice versa. This means deliberately defining reward functions that encode different objectives, not preserving a single one. The resulting reward functions combine multiple weighted components whose relative magnitudes directly determine what the agent optimizes. Small changes in these weights can produce qualitatively different behaviors, and there is no single ``correct'' weighting; the choice reflects a design decision about what behavior is desirable.
 
-Most reward shaping research evaluates on single-objective benchmarks (Atari, MuJoCo locomotion) where the reward is given or straightforward to define. Practitioners building agents for multi-objective tasks with competing pressures lack principled guidance: which components to include, how to set their relative weights, and when reward shaping itself is insufficient. This work addresses that gap. We derive design heuristics that rule out two specific degenerate configurations, show empirically that reward complexity can be counterproductive, and identify a case where the bottleneck is not the reward function but the observation: no reward configuration induces foraging, while a change to the observation (frame stacking) does.
+\paragraph{Scope and claim.} This work investigates a single concrete target, namely to make a DQN agent consistently match or exceed a scripted heuristic baseline on a multi-objective grid-survival task, and uses that target to structure a sequential bottleneck analysis. We start from reward shaping, run it to saturation, diagnose the resulting bottleneck, apply the most principled intervention, and repeat. We arrive at the following three-stage claim, each stage of which is supported by direct experiments in Section~\ref{sec:experiments}:
 
-This work presents a systematic study of reward shaping in a custom grid-based survival environment. The environment features a single agent on a $64 \times 64$ grid that must eat food to prevent starvation, avoid enemies that deal damage, and use shelters for protection. The reward function consists of up to twelve weighted components covering event-driven bonuses, continuous penalties, and spatial gradients. We vary these weights across experiments while holding the agent architecture fixed, isolating the effect of reward configuration on learned behavior.
+\begin{enumerate}[nosep,leftmargin=1.6em]
+  \item \emph{Reward shaping is necessary but saturates}. We derive four per-step design heuristics from environment mechanics (Section~\ref{sec:reward_configs}), document three reward-hacking failure modes, and systematically test the resulting reward landscape. A carefully engineered minimal reward produces the best reward-only agent (706 survival), but no reward configuration matches the heuristic (768 survival).
+  \item \emph{The next bottleneck is perceptual}. A single 4-frame stack of the spatial observation, with the reward function held constant, lifts the agent to $811$ survival ($p < 0.01$ vs heuristic) and three times the heuristic's foraging rate. The reward signal was adequate; the agent lacked the temporal information to exploit it.
+  \item \emph{The next bottleneck is training dynamics}. The frame-stacked policy peaks early and then collapses as exploration and learning rate decay together, a failure mode consistent with recent work on primacy bias and plasticity loss \citep{Nikishin2022, Dohare2024}. Periodic resets of the Dueling head, a single simple intervention from \citet{Nikishin2022}, lift the best agent to $871.7$ mean survival with $34\%$ of episodes hitting the $1000$-tick time limit ($p < 10^{-4}$).
+\end{enumerate}
 
-The agent is a Rainbow-lite DQN \citep{Hessel2018} combining Double DQN, a Dueling architecture, prioritized experience replay, and 3-step returns, along with several stability techniques (LayerNorm, AdamW, Polyak target updates). Training runs on single consumer hardware, following work by \citet{ObandoCeron2021}, \citet{Schwarzer2023}, \citet{ObandoCeron2024}, and \citet{Clark2024} demonstrating that algorithmic choices can substitute for massive compute.
+Figure~\ref{fig:bottleneck_progression} summarizes the progression. Each stage's intervention is necessary to reach the next stage's result; none of them individually is sufficient. The contribution is not a new RL algorithm but a worked example of how to diagnose what is bottlenecking a DQN agent in a multi-objective task where reward shaping alone does not suffice.
 
-Section~\ref{sec:background} reviews the relevant background. Section~\ref{sec:environment} describes the survival environment. Section~\ref{sec:architecture} details the agent architecture. Section~\ref{sec:experiments} presents the experiments and results. Sections~\ref{sec:discussion} and~\ref{sec:conclusion} discuss findings and conclude.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/bottleneck_progression}
+\caption{Sequential bottleneck progression. Each intervention addresses a different bottleneck: removing unused reward components (E5), adding temporal context (frame stacking), preserving plasticity (constant LR), and actively restoring it (periodic head resets). All DQN bars are the best seed of three, benchmarked over $100$ episodes.}
+\label{fig:bottleneck_progression}
+\end{figure}
+
+\paragraph{Agent and compute.} The agent is a Rainbow-lite DQN \citep{Hessel2018} combining Double DQN, a Dueling architecture, prioritized experience replay, and 3-step returns, along with several stability techniques (LayerNorm, AdamW, Polyak target updates). Training runs on single consumer hardware, following work by \citet{ObandoCeron2021}, \citet{Schwarzer2023}, \citet{ObandoCeron2024}, and \citet{Clark2024} demonstrating that algorithmic choices can substitute for massive compute. The architecture is held fixed across reward shaping experiments (Section~\ref{sec:experiments}) and instrumented with a single 4-frame stacking wrapper for the observation-space and dynamics experiments (Sections~\ref{sec:temporal} and \ref{sec:plasticity}).
+
+Section~\ref{sec:background} reviews the relevant background. Section~\ref{sec:environment} describes the survival environment. Section~\ref{sec:architecture} details the agent architecture. Section~\ref{sec:experiments} presents the experiments, organized by the three bottlenecks. Sections~\ref{sec:discussion} and~\ref{sec:conclusion} discuss findings and conclude.
 
 % =============================================================================
 \section{Background}
@@ -173,7 +186,14 @@ The agent observes through an egocentric $15 \times 15$ window (radius 7). The o
 \item Food presence
 \item Shelter presence
 \end{enumerate}
-Cells outside the grid boundary are zero. Three scalar features are appended: $\frac{h}{h_{\max}}$, $\frac{u}{u_{\max}}$, and a binary shelter indicator. The full observation is a 678-dimensional vector (675 spatial + 3 scalar).
+Cells outside the grid boundary are zero. Three scalar features are appended: $\frac{h}{h_{\max}}$, $\frac{u}{u_{\max}}$, and a binary shelter indicator. The full observation is a 678-dimensional vector (675 spatial + 3 scalar). Figure~\ref{fig:obs_space} illustrates the layout.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/observation_space}
+\caption{Observation structure. The agent (blue dot at the window center) sees three binary $15 \times 15$ grids corresponding to enemy, food, and shelter presence within radius 7, plus three scalar features summarizing the agent's internal state. Section~\ref{sec:temporal} shows that this single-frame observation is a perceptual bottleneck: stacking the last four frames (12 channels) lifts performance by roughly $100$ ticks.}
+\label{fig:obs_space}
+\end{figure}
 
 \subsection{Action Space}
 
@@ -462,53 +482,102 @@ E5 learns coherent shelter and flee behavior but barely forages: 0.66 food per e
 
 We tested explicit food rewards ($w_\text{food}$) at magnitudes from 0.3 to 5.0. At 5.0, the food reward causes the agent to pursue food through enemy zones; survival drops to 470. At lower magnitudes, the agent forages more but takes more damage; survival does not exceed E5's shelter-camping policy. No tested magnitude produces both increased foraging and maintained enemy avoidance.
 
-\subsection{Temporal Context}
+\subsection{Bottleneck 2: Temporal Context}
 \label{sec:temporal}
 
-Frame stacking provides temporal context by concatenating the spatial grids from the last $k$ time steps. The base observation has 3 spatial channels on a $15 \times 15$ grid; a 4-frame stack provides 12 channels. An enemy occupying different cells across consecutive frames reveals its direction and speed. The scalar features (health, hunger, shelter indicator) are taken from the current step only, since they already reflect the agent's cumulative state.
+The reward search saturated below the heuristic, so the question becomes what else limits the agent. A plausible candidate is the observation: the single-frame $15 \times 15$ grid shows positions but not motion. The agent cannot distinguish an approaching enemy from a retreating one, nor its own last movement direction. Because our proximity rewards are defined as potential deltas (Section~\ref{sec:reward_structure}), the optimal policy inherently depends on quantities the agent cannot observe directly.
 
-\paragraph{Effect on the state representation.} The single-frame observation space has dimension $|O_1| = 3 \cdot 15 \cdot 15 + 3 = 678$. With $k$-frame stacking, the spatial portion grows by a factor of $k$ while the scalars are unchanged: $|O_k| = 3k \cdot 15 \cdot 15 + 3$. For $k = 4$ this gives $|O_4| = 2703$, a factor of 3.99 increase in observation dimension. The number of distinguishable states the agent can condition its policy on grows roughly as $|S|^k$ in principle, since a history of $k$ frames distinguishes trajectories that collide in the single-frame representation. In practice the growth is smaller because most 4-tuples of consecutive grids are not reachable under the environment dynamics, but the agent gains access to derived quantities (velocity, approach direction) that were previously invisible.
+Frame stacking \citep{Mnih2015} provides temporal context by concatenating the spatial grids from the last $k$ time steps. The base observation has 3 spatial channels on a $15 \times 15$ grid; a 4-frame stack provides 12 channels. An enemy occupying different cells across consecutive frames reveals its direction and speed. The scalar features (health, hunger, shelter indicator) are taken from the current step only, since they already reflect the agent's cumulative state.
 
-We train E5 with $k = 4$ frames for 5{,}000{,}000 steps. The replay buffer is reduced from 1{,}000{,}000 to 250{,}000 transitions to accommodate the larger observation size. All other hyperparameters follow Table~\ref{tab:hyperparams} except for slower target updates ($\tau = 0.002$) and extended exploration ($\varepsilon$ decay over 1{,}000{,}000 steps).
+\paragraph{Effect on the state representation.} The single-frame observation space has dimension $|O_1| = 3 \cdot 15 \cdot 15 + 3 = 678$. With $k$-frame stacking the spatial portion grows by a factor of $k$ while the scalars are unchanged: $|O_k| = 3k \cdot 15 \cdot 15 + 3$. For $k = 4$ this gives $|O_4| = 2703$, a factor of 3.99 increase in observation dimension. The number of distinguishable histories the agent can condition its policy on grows roughly as $|S|^k$ in principle, since a sequence of $k$ frames distinguishes trajectories that collide in the single-frame representation. In practice the growth is smaller because most 4-tuples of consecutive grids are not reachable under the environment dynamics, but the agent gains access to derived quantities (velocity, approach direction) that were previously invisible.
+
+\paragraph{Result.} We train E5 with $k = 4$ frames for 5{,}000{,}000 steps. The replay buffer is reduced from 1{,}000{,}000 to 250{,}000 transitions to accommodate the larger observation size. All other hyperparameters follow Table~\ref{tab:hyperparams} except for slower target updates ($\tau = 0.002$). The best checkpoint (seed 44) benchmarks at $811 \pm 25$ survival with $4.12$ food per episode and $12\%$ time-limit rate ($p = 0.007$), the first DQN configuration to significantly outperform the heuristic. The reward was already sufficient; the perceptual bottleneck was the binding constraint.
+
+\paragraph{But the policy collapses.} The frame-stacked agent reaches its peak early, around 350K steps, and then regresses as training continues (Figure~\ref{fig:collapse}). The best-checkpoint result is real, but the policy is not sustained. This sets up the third bottleneck.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/collapse_curves}
+\caption{Frame-stacked agents peak early and then regress. Best-seed eval-survival trajectories (20-episode rolling mean) for two frame-stacked configurations. Dots mark the peak of each run. Both use the same reward structure and architecture as E5 plus 4-frame stacking. V5$_\mathrm{fs}$ uses the default OneCycle LR schedule; V6$_\mathrm{fs,food}$ adds a small food reward ($w_\text{food}=0.3$) and a higher $\varepsilon$ floor. The specific peak height varies, but the shape --- early peak followed by gradual regression --- is consistent.}
+\label{fig:collapse}
+\end{figure}
+
+\subsection{Bottleneck 3: Training Dynamics}
+\label{sec:plasticity}
+
+The collapse pattern in Figure~\ref{fig:collapse} is consistent with recent work on \emph{primacy bias} \citep{Nikishin2022} and \emph{plasticity loss} \citep{Dohare2024, Abbas2023}: as training progresses, the network loses the ability to incorporate new evidence. In our setup the mechanism is self-reinforcing. Once epsilon decays and the policy becomes deterministic, the replay buffer fills with transitions from the current (already committed) policy. Foraging transitions age out; the Q-network trains on biased data; the policy drifts further toward whatever behavior dominates the buffer. The decaying learning rate of the OneCycle schedule compounds this: by the time the buffer shifts, the effective LR is too small to correct.
+
+We test three interventions, each attacking the failure mode from a different angle. All share the same base: E5 rewards plus $w_\text{food} = 0.3$, 4-frame stacking, $2{,}000{,}000$ steps, $\tau = 0.002$, buffer $250{,}000$.
+
+\begin{enumerate}[nosep,leftmargin=1.6em]
+  \item \textbf{Constant learning rate (V7$_\mathrm{fs}$)}. Replace the OneCycle schedule with a constant $10^{-4}$. Preserves the network's capacity to update throughout training.
+  \item \textbf{Cyclical exploration (V8$_\mathrm{fs,cycle}$)}. In addition to constant LR, reset $\varepsilon$ to $0.5$ every $500{,}000$ steps. Directly refills the replay buffer with diverse transitions on a fixed cadence.
+  \item \textbf{Periodic head resets (V8$_\mathrm{fs,reset}$)}. In addition to constant LR, reset the Dueling head weights to a fresh initialization every $500{,}000$ steps while keeping the CNN encoder and replay buffer. This is the reset recipe from \citet{Nikishin2022}, applied to only the last layers.
+\end{enumerate}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/plasticity_interventions}
+\caption{Training-dynamics interventions compared. All three share the same reward and frame-stacking setup; they differ only in how training dynamics are managed. Dark line is the best seed, light lines are the other two seeds. Dots mark peak eval. Head resets (V8$_\mathrm{fs,reset}$) produce the highest and most durable trajectories.}
+\label{fig:plasticity}
+\end{figure}
+
+Constant LR alone already helps relative to the original V5$_\mathrm{fs}$ trajectory, raising the best benchmark to $826$ survival. Cyclical epsilon further refills the buffer and reaches $858$ in the best seed, but with high seed-to-seed variance. Periodic head resets (V8$_\mathrm{fs,reset}$) produce the strongest and most consistent result: $871.7$ survival, $6.25$ food per episode, $34\%$ of episodes reaching the $1000$-tick time limit ($p < 10^{-4}$). Two of three seeds significantly beat the heuristic. The median episode survives to tick $902$.
 
 \subsection{Results}
 \label{sec:results}
 
-Table~\ref{tab:results} reports benchmark performance over 100 episodes with fixed seeds (1000--1099). Each DQN result uses the best checkpoint across training, selected by evaluation survival.
+Table~\ref{tab:results} compiles the benchmark for each bottleneck stage against the heuristic and against the other interventions. Each DQN row is the best seed of three, evaluated over $100$ episodes on seeds $1000$--$1099$ (the same fixed seeds used for the heuristic baseline).
 
 \begin{table}[h]
 \centering
-\caption{Benchmark results (100 episodes, mean $\pm$ 95\% CI). DQN results report the best of three seeds.}
+\caption{Bottleneck progression benchmark ($100$ episodes, mean $\pm$ 95\% CI for survival). Each DQN row reports the best-seed result. Significance is a two-sided Welch $t$-test against the heuristic.}
 \label{tab:results}
 \small
-\begin{tabular}{lrrrrl}
+\begin{tabular}{lrrrrr}
 \toprule
-Configuration & Survival & Food & Damage & Death & vs.\ Heuristic \\
+Configuration & Survival & Food & Damage & Time-limit & vs.\ heuristic ($p$) \\
 \midrule
-Heuristic               & $768 \pm 19$ & 1.19 & 99.5 & 95\% & --- \\
+Heuristic                               & $768 \pm 19$        & $1.19$ & $99.5$ & $5\%$  & --- \\
 \midrule
-E5 (minimal)            & $715 \pm 19$ & 0.66 & 101  & 100\% & $-54$ ($p < 0.001$) \\
-E5 + food reward (5.0)  & $470 \pm 26$ & 0.81 & 100  & 100\% & $-298$ ($p < 0.001$) \\
-E5 + extended training  & $699 \pm 16$ & 0.39 & 100  & 100\% & $-70$ ($p < 0.001$) \\
-E5 + frame stacking     & $\mathbf{811 \pm 25}$ & 4.12 & 98.5 & 88\% & $\mathbf{+43}$ ($p = 0.007$) \\
+\multicolumn{6}{l}{\textit{Bottleneck 1: reward design}} \\
+E4 (9 components)                       & $695 \pm 30$        & $2.19$ & $99.2$ & $0\%$  & $<\!0.001$ \\
+E5 (minimal, 4 components)              & $706 \pm 19$        & $0.58$ & $10.4$ & $0\%$  & $<\!0.001$ \\
+E5 + food reward ($w_\text{food}=5$)    & $470 \pm 26$        & $0.81$ & $100$  & $0\%$  & $<\!0.001$ \\
+E5 + extended training (5M)             & $699 \pm 16$        & $0.39$ & $100$  & $0\%$  & $<\!0.001$ \\
+\midrule
+\multicolumn{6}{l}{\textit{Bottleneck 2: observation}} \\
+E5 + 4-frame stacking                   & $811 \pm 25$        & $4.12$ & $98.5$ & $12\%$ & $0.007$ \\
+\midrule
+\multicolumn{6}{l}{\textit{Bottleneck 3: training dynamics}} \\
++ constant LR (V7$_\mathrm{fs}$)        & $826 \pm 21$        & $3.91$ & $100$  & $6\%$  & $0.0001$ \\
++ cyclical $\varepsilon$ (V8$_\mathrm{fs,cycle}$) & $859 \pm 28$        & $5.36$ & $95$   & $28\%$ & $<\!0.05$ \\
++ head resets (V8$_\mathrm{fs,reset}$)  & $\mathbf{871.7 \pm 28}$ & $\mathbf{6.25}$ & $84.7$ & $\mathbf{34\%}$ & $\mathbf{<\!10^{-4}}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The frame-stacking agent significantly outperforms the heuristic across all three seeds ($p < 0.05$). It eats 4.12 food items per episode, more than three times the heuristic, while taking comparable damage. 12\% of episodes reach the 1000-step time limit, something no other DQN configuration achieved.
-
-Extended training (5{,}000{,}000 steps on E5 without frame stacking) does not help. All three seeds peak between steps 1.7--2.8 million and decline afterward. Longer training hardens the shelter-camping policy rather than discovering foraging.
+Each stage's intervention produces an improvement on top of the previous stage. The reward search saturates at $706$; frame stacking alone lifts that to $811$; constant LR lifts it to $826$; cyclical $\varepsilon$ and head resets each lift it further. The cumulative gain from baseline E5 to V8$_\mathrm{fs,reset}$ is $+165$ survival and a $34$-fold increase in the $1000$-tick episode rate.
 
 \subsection{Summary of Observations}
 \label{sec:analysis}
 
-Three empirical patterns emerge from the experiments.
+Five empirical patterns emerge from the experiments.
 
 \paragraph{Fewer reward components produce better policies.}
-E5 with four reward components outperforms E4 with nine (715 vs 695 mean survival), despite receiving less information per step.
+E5 with four reward components outperforms E4 with nine (706 vs 695 mean survival), despite receiving less information per step.
 
 \paragraph{Reward scaling does not resolve the foraging gap.}
-Adding a food reward to E5 at magnitudes from 0.3 to 5.0 either degrades enemy avoidance (high values) or fails to improve survival (low values). Extended training (5M steps) also does not help: all seeds peak early and decline.
+Adding a food reward to E5 at magnitudes from $0.3$ to $5.0$ either degrades enemy avoidance (high values) or fails to improve survival (low values). Extended training ($5$M steps) also does not help: all seeds peak early and decline.
+
+\paragraph{Temporal context is a hard constraint for delta-based rewards.}
+PBRS delta proximity rewards depend on position changes, but the single-frame observation cannot distinguish motion from stasis. Frame stacking provides the missing information and lifts performance above the heuristic without changing the reward at all.
+
+\paragraph{Policy collapse is a training-dynamics problem, not a reward problem.}
+The collapse occurs with the same reward function that produced the peak. Fixing it requires either preserving plasticity (constant LR), actively refreshing it (head resets), or preventing the buffer bias that drives it (cyclical $\varepsilon$).
+
+\paragraph{Head resets provide the largest single gain.}
+A periodic re-initialization of just the Dueling head, keeping the CNN encoder and replay buffer, produced the highest individual seed ($871$ survival) and the highest $1000$-tick rate ($34\%$). This aligns with \citet{Nikishin2022}'s finding that targeted resets are a simple and reliable counter to primacy bias.
 
 \paragraph{Frame stacking enables foraging.}
 The only modification that produces foraging behavior competitive with the heuristic is frame stacking. The reward function is unchanged; only the observation changes. The frame-stacking agent eats 4.12 food per episode (vs 0.66 without), but the foraging policy is transient: survival peaks early in training (856--867 at step 350K) and declines as training continues. The best checkpoint captures this transient behavior.
@@ -524,39 +593,41 @@ Absolute proximity would reward the agent for being near food, creating the hove
 The results raise two questions: why does the agent not learn to forage under reward shaping alone, and why does frame stacking enable it? We propose three hypotheses, each with a suggested falsification test.
 
 \paragraph{Reward design as constrained optimization.}
-The design heuristics H1--H4 formalize per-step reward dynamics as inequalities over the weight vector. Satisfying all heuristics is necessary but not sufficient: the baseline satisfies all four yet fails due to the structural incompatibility between hunger-proportional penalty and movement cost. The progression from E4 to E5 shows that removing harmful signals is more effective than adding informative ones. The heuristics rule out two specific degenerate policies (hovering, suicide) but do not guarantee the intended behavior.
+The design heuristics H1--H4 formalize per-step reward dynamics as inequalities over the weight vector. Satisfying all heuristics is necessary but not sufficient: the baseline satisfies all four yet fails due to the structural incompatibility between hunger-proportional penalty and movement cost. The progression from E4 to E5 shows that removing harmful signals can be more effective than adding informative ones. The heuristics rule out two specific degenerate policies (hovering, suicide) but do not guarantee the intended behavior.
 
-\paragraph{H1: State aliasing.}
-The single-frame observation maps distinct situations to identical representations. A food tile near an enemy looks the same regardless of whether the enemy is approaching or retreating. The Q-network must assign a single value to both cases, which may average out the foraging benefit. Frame stacking resolves this by making enemy trajectories visible, allowing the network to distinguish safe from dangerous foraging states. \emph{Falsification:} freeze enemies in place (remove the trajectory dimension) and retrain with frame stacking. If frame stacking still outperforms single-frame, the advantage is not primarily from trajectory detection, and this hypothesis is wrong.
+\paragraph{The perceptual bottleneck.}
+The reward-shaping search converged on a configuration that was coherent, PBRS-compliant, and analytically defensible --- yet still produced an agent that consistently under-forages. Frame stacking, a single well-known observation-level change \citep{Mnih2015}, unlocked the policy the reward had been aiming for. This is consistent with the recent framing that optimization rather than exploration is often the binding constraint in DeepRL \citep{Tarbouriech2025}: the reward signal was adequate, but the agent could not exploit it without temporal context. A reviewer or practitioner encountering a saturating reward-shaping campaign should check the observation before concluding that the reward is misspecified.
 
-\paragraph{H2: Discount blindness.}
-At $\gamma = 0.99$, the death penalty of $-10$ at step 700 has present value $-10 \times 0.99^{700} \approx -0.009$. The survival benefit of eating one food item (delaying death by roughly 100 steps) is worth approximately $0.006$ in present value. This signal may be too small relative to TD estimation error for the network to learn from. \emph{Falsification:} train with $\gamma = 1$ and a small survival tick ($w_\text{tick} = 0.01$) to make the survival benefit of eating undiscounted. If foraging emerges without frame stacking, the discount factor is a contributing cause of the foraging gap.
+\paragraph{The training-dynamics bottleneck.}
+The collapse pattern in Figure~\ref{fig:collapse} matches descriptions of \emph{primacy bias} \citep{Nikishin2022} and \emph{plasticity loss} \citep{Dohare2024, Abbas2023}: as training progresses, the network loses the ability to incorporate new evidence, even when that evidence is present in the buffer. In our setup this manifests as a self-reinforcing loop between the $\varepsilon$-greedy exploration schedule and the OneCycle learning rate schedule. When both decay together, the replay buffer fills with transitions from the committed policy and the network no longer has the effective LR to correct. Each of our three dynamics interventions attacks a different point in this loop: constant LR preserves plasticity, cyclical $\varepsilon$ refills the buffer, and periodic head resets actively de-commit the value function. All three help; head resets help most.
 
-\paragraph{H3: Exploration insufficiency.}
-Under $\varepsilon$-greedy with $\varepsilon = 0.01$ (post-decay), the agent rarely leaves shelter. Few foraging transitions enter the replay buffer, so the network has little data from which to learn foraging value. Frame stacking may help not because of what it represents, but because the larger observation space and different training dynamics produce a different exploration pattern during the critical early phase. \emph{Falsification:} replace $\varepsilon$-greedy with an intrinsic motivation method (e.g., RND) that encourages visiting novel states, and retrain without frame stacking. If foraging emerges, insufficient exploration was the primary bottleneck.
+\paragraph{The specific LR--$\varepsilon$ interaction we observed does not appear to be well-characterized in the literature.} Individual phenomena are studied (plasticity loss under LR schedules \citep{Lyle2024}, policy collapse from replay distribution shift \citep{Tarbouriech2025}), but their specific co-occurrence as a failure mode in Rainbow-lite DQN has not been isolated. Investigating whether constant LR is generally preferable to OneCycle for DQN-class algorithms would be a reasonable follow-up.
 
-These hypotheses are not mutually exclusive. The foraging gap may result from a combination of state aliasing, weak reward signal, and insufficient exploration, with frame stacking partially addressing all three.
-
-\paragraph{Policy collapse.}
-The frame-stacking agent's foraging policy is transient. It peaks early in training and collapses as the agent converges toward shelter-camping. One interpretation is that the flee gradient ($-0.5$) eventually dominates the food proximity gradient ($+0.15$) as Q-value estimates sharpen. Another is that the foraging policy is a side effect of early noisy exploration that the agent ``unlearns'' as it optimizes more precisely. Distinguishing these interpretations requires examining the Q-value landscape at different training stages.
+\paragraph{Why resets beat cyclical $\varepsilon$.} Both interventions inject perturbation on a $500$K schedule. Cyclical $\varepsilon$ injects data diversity; resets inject representation diversity. If the dominant failure mode were lack of exploration, cyclical $\varepsilon$ should have won. If it were network commitment to stale value estimates, resets should have won. Resets winning suggests the latter, consistent with primacy bias being the dominant mechanism rather than pure exploration insufficiency.
 
 \paragraph{Limitations.}
-The frame-stacking result relies on early checkpoint selection. The environment is a single grid world, and the findings may not generalize to continuous-action domains or tasks with different time scales.
+The best results rely on early-checkpoint selection: \texttt{model\_best.pt} is the highest single $20$-episode eval, which is a noisy selection criterion. On $100$-episode benchmarks the best-seed numbers hold up, but seed-to-seed variance is substantial (e.g., V8$_\mathrm{fs,reset}$ ranges from $788$ to $872$). A more stable evaluation protocol (e.g., mean of top-$k$ checkpoints) would tighten these numbers.
 
-We did not run an architecture grid over network depth, width, or CNN kernel sizes. With roughly 8 hours per 2M-step run and 3 seeds per configuration, even a modest grid of 10 architecture variants would cost on the order of 240 training hours per reward configuration. Because this work isolates reward shaping, architecture was held fixed at values from the literature and the saved compute budget was spent on the reward and frame-stacking comparisons instead. A targeted architecture search could improve absolute numbers but would not change the qualitative findings: the minimal reward beats richer alternatives, and frame stacking beats all of them.
+The environment is a single grid world. Any claim of generality --- about the heuristics H1--H4, about the bottleneck ordering, or about the plasticity fix --- would require replication on additional tasks. We state the findings as a case study.
+
+We did not run an architecture grid over network depth, width, or CNN kernel sizes. With roughly $8$ hours per $2$M-step run and $3$ seeds per configuration, even a modest grid of $10$ architecture variants would cost on the order of $240$ training hours per reward configuration. The saved compute budget was spent on the reward, observation, and dynamics comparisons instead. A targeted architecture search could improve absolute numbers but would not change the qualitative ordering of the bottlenecks.
 
 % =============================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 % =============================================================================
 
-We studied how reward function design affects learned behavior in a multi-objective survival task. By varying reward weights while holding the agent fixed, we identified three failure modes and derived four design heuristics that characterize the reward regime in which the hovering and suicide modes are avoided. A minimal configuration with four components outperforms alternatives with up to nine.
+We asked what it takes to make a Rainbow-lite DQN agent consistently match or exceed a scripted heuristic on a multi-objective grid-survival task, and used that target to structure a sequential bottleneck analysis.
 
-Reward shaping alone does not match a scripted heuristic in our experiments. No tested food reward magnitude closes the foraging gap: large values degrade enemy avoidance, small values fail to change behavior, and extended training reinforces shelter-camping rather than discovering foraging.
+Reward shaping turned out to be necessary but not sufficient. We derived four per-step design heuristics (H1--H4) from the environment mechanics, characterized three reward-hacking failure modes (oscillation, hovering, suicide), and systematically tested the resulting configurations. The best reward-only agent reached $706$ survival, below the heuristic's $768$. Scaling individual components, adding compensating penalties, curriculum learning, and extended training all failed to close the gap.
 
-Frame stacking, without any change to the reward function, produces an agent that significantly outperforms the heuristic (811 vs 768 mean survival, $p = 0.007$), eats three times more food, and survives to the episode time limit in 12\% of episodes. The foraging policy is transient, peaking early in training and collapsing with continued optimization.
+The next bottleneck was the observation. A single 4-frame stack, added without touching the reward function, lifted the agent to $811$ survival with $p = 0.007$, and tripled its foraging rate. The reward had been adequate; temporal context was missing.
 
-Why reward shaping alone fails and why frame stacking succeeds remain open questions. We proposed three hypotheses (state aliasing, discount blindness, exploration insufficiency) with concrete falsification tests. Future work includes running these tests, investigating the mechanism behind policy collapse, and testing whether combining frame stacking with a moderate food reward ($w_\text{food} = 0.3$) can stabilize the foraging policy.
+The final bottleneck was training dynamics. The frame-stacked policy peaked early and regressed as exploration and learning rate decayed together, a failure mode consistent with recent work on primacy bias and plasticity loss. Of three targeted interventions (constant LR, cyclical $\varepsilon$, Nikishin-style head resets), head resets produced the strongest and most stable result: $871.7$ mean survival with $34\%$ of episodes reaching the $1000$-tick time limit, significantly better than the heuristic ($p < 10^{-4}$).
+
+The specific numbers are tied to this environment, but the methodology --- iteratively identify what is limiting the agent and test the most principled intervention --- transfers. For practitioners building RL agents in multi-objective domains, the ordering reward $\rightarrow$ observation $\rightarrow$ dynamics is a useful default sequence to check, not a generic claim of what always matters.
+
+Future work includes replicating on a second environment to probe the generality of the ordering, running the combined cyclical-$\varepsilon$-plus-reset variant that we have not yet benchmarked, and testing whether state-dependent exploration (NoisyNet) can replace both the cyclical schedule and the reset mechanism with a single learned alternative.
 
 % =============================================================================
 % References

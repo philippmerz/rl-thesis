@@ -11,4 +11,4 @@ runs
 latex/out
 .venv
 .DS_Store
-deploy/
+deploy/latex/original/out/
