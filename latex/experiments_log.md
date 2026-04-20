@@ -128,27 +128,63 @@ Chronological record of all reward shaping and architecture experiments. Each en
 - OneCycle LR at step 2M is ~5e-5; by step 3M it's ~2e-5. Too small to correct the buffer shift once foraging transitions age out
 - Self-reinforcing: less foraging in buffer → worse foraging Q-values → less foraging behavior
 
-### `engineered_v7_fs` (FS + food_eaten=0.3 + constant LR + 2M steps) — IN PROGRESS
+### `engineered_v7_fs` (FS + food_eaten=0.3 + constant LR + 2M steps)
 - Hypothesis: constant LR (1e-4) maintains plasticity to resist buffer distribution shift. Shorter training (2M) captures peak window.
-- Peak so far: seed 44 hit **847 survival with 4.80 food, 65% death at step 590K** — fully at epsilon=0.05
-- Seed 43: 825 survival, 4.70 food, 70% death at step 575K — also post-epsilon-decay
-- Seed 42: 765 survival, 4.40 food, 100% death at step 475K
-- Current (step 745K): modest regression (576-703 survival, 2.5-5.8 food) but much less severe than V6_fs_food
-- Training ends at 2M steps (~4 more hours). Benchmark pending.
+- Benchmarks (100 episodes each):
+  - Seed 42: 797.7 survival, 4.55 food, p=0.060
+  - Seed 43: **826.1 survival, 3.91 food, p=0.0001**
+  - Seed 44: **812.3 survival, 3.85 food, 12% time-limit, p=0.007**
+- Takeaway: constant LR helps. 2/3 seeds significantly beat heuristic. Still regression in late training but not catastrophic collapse.
 
-## Key findings so far
+## Phase 7: Targeted collapse interventions (V8)
+
+Three interventions tested in parallel, each attacking a different candidate root cause. All use V7_fs base (FS + food_eaten=0.3 + constant LR + 2M steps).
+
+### `engineered_v8_fs_cycle` — cyclical epsilon
+- Hypothesis: epsilon resets to 0.5 every 500K steps refill the replay buffer with diverse transitions, breaking the self-reinforcing distribution shift.
+- Benchmarks:
+  - Seed 42: 780.0 survival, 3.75 food, 10% time-limit, p=0.38
+  - Seed 43: **858.7 survival, 5.36 food, 28% time-limit, p<0.05** (NEW RECORD at time)
+  - Seed 44: 742.2 survival, 1.42 food, p=0.05 (below heuristic)
+- Takeaway: best seed broke 850 for the first time. Inconsistent across seeds (28% vs 3% time-limit).
+
+### `engineered_v8_fs_reset` — Nikishin head resets
+- Hypothesis: resetting the Dueling head weights every 500K steps (keeping CNN encoder and replay buffer) directly counters plasticity loss and primacy bias (Nikishin et al. 2022).
+- Benchmarks:
+  - Seed 42: 788.0 survival, 6.22 food, 25% time-limit, p=0.24
+  - Seed 43: **840.5 survival, 7.63 food, 35% time-limit, p<0.001**
+  - Seed 44: **871.7 survival, 6.25 food, 34% time-limit, p<0.0001** (overall best)
+- Median episode for seed 44: 902 ticks. Min/max: 398/1000.
+- Takeaway: head resets produced the highest individual seed and the best food-consumption numbers. 2/3 seeds significantly beat heuristic. Plasticity diagnosis confirmed as a useful fix.
+
+### `engineered_v8_fs_strong` — stronger foraging signals
+- Hypothesis: doubling food_eaten (0.3 → 0.5) and food_proximity (0.15 → 0.3) pushes foraging harder. Enemy proximity stays at -0.5; ratio now 1.0x instead of 3.3x.
+- Benchmarks:
+  - Seed 42: 788.4 survival, 4.61 food, 12% time-limit, p=0.21
+  - Seed 43: 637.9 survival, 2.92 food, p<0.001 (**heuristic wins**)
+  - Seed 44: 646.9 survival, 3.60 food, p<0.001 (**heuristic wins**)
+- Takeaway: stronger signals hurt more than helped. 2/3 seeds significantly underperformed heuristic. Rejected.
+
+## Key findings
 
 1. **Fewer reward components outperform more** (E5 > E4 with strictly less information)
 2. **Delta proximity eliminates hovering** (vs absolute proximity)
 3. **Hunger-proportional penalty is structurally incompatible** with movement cost at gamma=0.99
-4. **Food reward magnitude matters**: 0.3 works with FS, 2-5 destabilizes flee behavior
-5. **Frame stacking enables conditional foraging** — 811 benchmark (p=0.007 vs heuristic) is the first significant improvement
+4. **Food reward magnitude matters**: 0.3 works with FS, 2-5 destabilizes flee, 0.5 also destabilizes
+5. **Frame stacking enables conditional foraging** — 811 benchmark (p=0.007) is the first significant improvement
 6. **Policy collapse is not a reward problem** — gamma=1 made it worse
 7. **Policy collapse correlates with LR decay** — constant LR (V7_fs) shows more durable peaks
+8. **Plasticity diagnosis is correct** — Nikishin head resets (V8_fs_reset) produced the best overall result: 871 survival, 34% time-limit rate, 6.25 food/episode (p<0.0001)
+
+## Current best
+
+V8_fs_reset seed 44: 871 survival ± 27.7 (95% CI), 6.25 food/episode, 34% of episodes reach 1000-tick time limit, 66% death rate. Significantly beats heuristic (768 survival, 5% time-limit) with p<0.0001, t=6.05.
+
+Not "consistently 1000 ticks" but a ~13% improvement in mean survival and ~7x improvement in time-limit rate over the heuristic baseline.
 
 ## Remaining questions
 
-- Does V7_fs (constant LR) produce a stable policy through 2M steps? (answer in ~4h)
-- Can we push the 35% time-limit rate (seed 43 at peak) higher? Goal is consistent 1000-tick episodes.
-- Would NoisyNet (state-dependent exploration) preserve diverse replay buffer content better than epsilon-greedy?
-- Would cyclical epsilon or a partitioned replay buffer prevent the distribution shift directly?
+- Why does V8_fs_reset show inconsistency across seeds (seed 42 at 788 vs seed 44 at 871)?
+- Would combining cyclical epsilon + head resets work better than either alone?
+- Would longer resets (every 250K) or fewer (every 1M) work better?
+- Can we push past 35% time-limit without architectural changes beyond DQN?

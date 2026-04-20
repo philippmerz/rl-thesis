@@ -609,6 +609,69 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         },
     },
 
+    # V9_fs_cycle_reset: combines the two V8 interventions that each improved
+    # on V7_fs. Cyclical epsilon (buffer diversity) and head resets (network
+    # plasticity) attack the policy-collapse problem from opposite ends.
+    # Hypothesis: the two are complementary. Cyclical epsilon ensures diverse
+    # data enters the buffer; head resets ensure the network can still learn
+    # from it after drift has accumulated.
+    "engineered_v9_fs_cycle_reset": {
+        "reward_food_eaten": 0.3,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "_dqn": {
+            "frame_stack": 4,
+            "total_timesteps": 2_000_000,
+            "epsilon_decay_steps": 500_000,
+            "epsilon_end": 0.05,
+            "epsilon_cycle_steps": 500_000,
+            "epsilon_cycle_peak": 0.5,
+            "buffer_size": 250_000,
+            "tau": 0.002,
+            "lr_schedule": "constant",
+            "head_reset_freq": 500_000,
+        },
+    },
+
+    # V9_fs_strong_reset: stronger foraging signals (V8_fs_strong) + head resets.
+    # V8_fs_strong alone underperformed (2/3 seeds below heuristic), likely
+    # because the stronger signals amplified the collapse trajectory. Head
+    # resets may rescue the strong-signal regime by periodically restoring
+    # plasticity before the policy over-commits to foraging into danger.
+    "engineered_v9_fs_strong_reset": {
+        "reward_food_eaten": 0.5,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.3,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "_dqn": {
+            "frame_stack": 4,
+            "total_timesteps": 2_000_000,
+            "epsilon_decay_steps": 500_000,
+            "epsilon_end": 0.05,
+            "buffer_size": 250_000,
+            "tau": 0.002,
+            "lr_schedule": "constant",
+            "head_reset_freq": 500_000,
+        },
+    },
+
     # V5 with extended training and tuned DQN hyperparameters.
     #
     # V5 seed 42 peaked at 766.9 survival (step 1.56M) before
