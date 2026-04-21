@@ -163,28 +163,47 @@ Three interventions tested in parallel, each attacking a different candidate roo
   - Seed 42: 788.4 survival, 4.61 food, 12% time-limit, p=0.21
   - Seed 43: 637.9 survival, 2.92 food, p<0.001 (**heuristic wins**)
   - Seed 44: 646.9 survival, 3.60 food, p<0.001 (**heuristic wins**)
-- Takeaway: stronger signals hurt more than helped. 2/3 seeds significantly underperformed heuristic. Rejected.
+- Takeaway: stronger signals alone hurt more than helped (2/3 seeds under heuristic). But see V9_fs_strong_reset below: combining with head resets rescues the strong-signal regime.
+
+## Phase 8: Combined interventions (V9)
+
+### `engineered_v9_fs_cycle_reset` — cyclical epsilon + head resets
+- Hypothesis: cycle and reset attack the same collapse mechanism from different angles (buffer diversity vs. network plasticity). Should be complementary.
+- Benchmarks:
+  - Seed 42: 790.4 survival, 6.11 food, 22% time-limit, p=0.20
+  - Seed 43: 751.3 survival, 5.83 food, 16% time-limit, p=0.35
+  - Seed 44: 850.4 survival, 5.60 food, 34% time-limit, p<0.0001
+- Takeaway: inconsistent. Best seed matches V8_fs_cycle's 858 but didn't exceed V8_fs_reset's 871. The two interventions did not compose cleanly; the combination is no better than resets alone.
+
+### `engineered_v9_fs_strong_reset` — stronger signals + head resets — NEW BEST
+- Hypothesis: V8_fs_strong destabilized (the agent over-committed to foraging in danger zones). Periodic head resets may rescue this regime by periodically wiping the value function before over-commitment entrenches.
+- Benchmarks:
+  - Seed 42: 797.2 survival, 7.37 food, 23% time-limit, p=0.11
+  - Seed 43: 805.5 survival, 7.75 food, 24% time-limit, p=0.037
+  - Seed 44: **868.2 survival, 13.55 food, 44% time-limit, p<0.0001** (new record)
+- Seed 44 details: 76.7 damage, 56% death rate, median episode 954 ticks, min/max 412/1000.
+- Takeaway: confirmed hypothesis. Stronger signals + resets > resets alone on food consumption and time-limit rate. Food consumption doubled from V8_fs_reset (13.55 vs 6.25). This is the first config where nearly half of episodes cap out.
 
 ## Key findings
 
 1. **Fewer reward components outperform more** (E5 > E4 with strictly less information)
 2. **Delta proximity eliminates hovering** (vs absolute proximity)
 3. **Hunger-proportional penalty is structurally incompatible** with movement cost at gamma=0.99
-4. **Food reward magnitude matters**: 0.3 works with FS, 2-5 destabilizes flee, 0.5 also destabilizes
+4. **Food reward magnitude matters**: 0.3 works alone; 0.5 destabilizes without resets, works well with resets
 5. **Frame stacking enables conditional foraging** — 811 benchmark (p=0.007) is the first significant improvement
 6. **Policy collapse is not a reward problem** — gamma=1 made it worse
 7. **Policy collapse correlates with LR decay** — constant LR (V7_fs) shows more durable peaks
-8. **Plasticity diagnosis is correct** — Nikishin head resets (V8_fs_reset) produced the best overall result: 871 survival, 34% time-limit rate, 6.25 food/episode (p<0.0001)
+8. **Plasticity diagnosis is correct** — Nikishin head resets produced the best single-intervention result (V8_fs_reset: 871 survival, 34% time-limit, p<0.0001)
+9. **Resets rescue otherwise-destabilizing reward signals** — V8_fs_strong underperformed; V9_fs_strong_reset became the overall record (868 survival, 44% time-limit, 13.55 food)
 
 ## Current best
 
-V8_fs_reset seed 44: 871 survival ± 27.7 (95% CI), 6.25 food/episode, 34% of episodes reach 1000-tick time limit, 66% death rate. Significantly beats heuristic (768 survival, 5% time-limit) with p<0.0001, t=6.05.
+V9_fs_strong_reset seed 44: 868.2 survival ± 32 (95% CI), 13.55 food/episode, 44% of episodes reach 1000-tick time limit, median episode 954 ticks. Significantly beats heuristic (768 survival, 5% time-limit) with p<0.0001, t=5.27.
 
-Not "consistently 1000 ticks" but a ~13% improvement in mean survival and ~7x improvement in time-limit rate over the heuristic baseline.
+Mean survival is capped at 1000 for 44% of episodes, so the benchmark mean underestimates the policy's capability. A raised-cap experiment (V10) is running to measure episode lengths without artificial truncation.
 
 ## Remaining questions
 
-- Why does V8_fs_reset show inconsistency across seeds (seed 42 at 788 vs seed 44 at 871)?
-- Would combining cyclical epsilon + head resets work better than either alone?
-- Would longer resets (every 250K) or fewer (every 1M) work better?
-- Can we push past 35% time-limit without architectural changes beyond DQN?
+- V10_fs_uncapped (max_steps=10000): how far does the strong-reset policy actually go when not artificially stopped?
+- Why does V9_fs_strong_reset show such a wide seed gap (797-868)? Is reset timing interacting with the phase of learning?
+- Is there a sweet spot for reset frequency (250K vs 500K vs 1M)?
