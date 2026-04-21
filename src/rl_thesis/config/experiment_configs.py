@@ -672,6 +672,38 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         },
     },
 
+    # V10_fs_uncapped: V9_fs_strong_reset with the 1000-tick episode
+    # cap raised to 10000. V9_fs_strong_reset seed 44 hit the cap in
+    # 44% of benchmark episodes, so the mean survival underestimates
+    # the policy's true capability. Raising the cap lets us observe
+    # how far the agent actually goes when not artificially stopped.
+    # Training and benchmark both use the new cap.
+    "engineered_v10_fs_uncapped": {
+        "max_steps": 10_000,
+        "reward_food_eaten": 0.5,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.3,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "_dqn": {
+            "frame_stack": 4,
+            "total_timesteps": 2_000_000,
+            "epsilon_decay_steps": 500_000,
+            "epsilon_end": 0.05,
+            "buffer_size": 250_000,
+            "tau": 0.002,
+            "lr_schedule": "constant",
+            "head_reset_freq": 500_000,
+        },
+    },
+
     # V5 with extended training and tuned DQN hyperparameters.
     #
     # V5 seed 42 peaked at 766.9 survival (step 1.56M) before
