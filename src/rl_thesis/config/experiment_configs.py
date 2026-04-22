@@ -677,6 +677,40 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         },
     },
 
+    # V9_fs_strong_reset extended to 10M steps. Tests whether the
+    # best-performing config keeps improving past 2M when plasticity
+    # is actively preserved (constant LR) and actively restored
+    # (periodic head resets). Previous long runs (V5_fs at 5M,
+    # V6_fs_food at 5M) showed no late improvement, but they used
+    # OneCycle LR which decays to ~1e-5 by 2M, confounding "no late
+    # improvement" with "LR too low to update." This run controls
+    # for that.
+    "engineered_v9_fs_strong_reset_long": {
+        "max_steps": 50_000,
+        "reward_food_eaten": 0.5,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.3,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "_dqn": {
+            "frame_stack": 4,
+            "total_timesteps": 10_000_000,
+            "epsilon_decay_steps": 500_000,
+            "epsilon_end": 0.05,
+            "buffer_size": 250_000,
+            "tau": 0.002,
+            "lr_schedule": "constant",
+            "head_reset_freq": 500_000,
+        },
+    },
+
     # V5 with extended training and tuned DQN hyperparameters.
     #
     # V5 seed 42 peaked at 766.9 survival (step 1.56M) before
