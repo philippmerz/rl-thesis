@@ -184,6 +184,18 @@ Three interventions tested in parallel, each attacking a different candidate roo
 - Seed 44 details: 76.7 damage, 56% death rate, median episode 954 ticks, min/max 412/1000.
 - Takeaway: confirmed hypothesis. Stronger signals + resets > resets alone on food consumption and time-limit rate. Food consumption doubled from V8_fs_reset (13.55 vs 6.25). This is the first config where nearly half of episodes cap out.
 
+## Phase 9: Uncapped ceiling (V10)
+
+### `engineered_v10_fs_uncapped` — V9_fs_strong_reset with max_steps=10000
+- Motivation: V9_fs_strong_reset hit the 1000-tick cap in 44% of episodes. With the cap in place, mean survival is a lower bound on the policy's true capability.
+- Same config as V9_fs_strong_reset except `max_steps=10000`. Training AND benchmark both use the raised cap.
+- Benchmarks (100 episodes, max_steps=10000):
+  - Seed 42: **943.7 survival ± 55, 7.82 food, median 924, min/max 361/1626, p=0.011** (new best mean)
+  - Seed 43: 730.6 survival, 7.84 food, median 673, min/max 213/**2477**, p=0.21
+  - Seed 44: 854.0 survival, 10.99 food, median 751, min/max 330/1751, p=0.013
+- Heuristic baseline (re-run with the same cap): 769.9 survival, 0% reach 10K, max 1072. Heuristic's "time-limit survivors" die before 1100 when uncapped.
+- Takeaway: **the agent does not survive indefinitely.** 100% death rate in all seeds. But seed 42 more than half of episodes survive past 900 ticks (median 924), and seed 43 hit a single 2477-tick episode. The V9 44% time-limit rate wasn't hiding infinite survival: those capped episodes would have died between 1000 and ~2000 ticks. The uncapped benchmark characterizes the policy's actual ceiling rather than artificially truncating it.
+
 ## Key findings
 
 1. **Fewer reward components outperform more** (E5 > E4 with strictly less information)
@@ -195,15 +207,23 @@ Three interventions tested in parallel, each attacking a different candidate roo
 7. **Policy collapse correlates with LR decay** — constant LR (V7_fs) shows more durable peaks
 8. **Plasticity diagnosis is correct** — Nikishin head resets produced the best single-intervention result (V8_fs_reset: 871 survival, 34% time-limit, p<0.0001)
 9. **Resets rescue otherwise-destabilizing reward signals** — V8_fs_strong underperformed; V9_fs_strong_reset became the overall record (868 survival, 44% time-limit, 13.55 food)
+10. **The policy extends survival but doesn't achieve it indefinitely** — V10_fs_uncapped at max_steps=10000: 100% death rate in all seeds; best seed mean 944 with median 924; single longest episode 2477 ticks
 
 ## Current best
 
-V9_fs_strong_reset seed 44: 868.2 survival ± 32 (95% CI), 13.55 food/episode, 44% of episodes reach 1000-tick time limit, median episode 954 ticks. Significantly beats heuristic (768 survival, 5% time-limit) with p<0.0001, t=5.27.
+V10_fs_uncapped seed 42 (max_steps=10000 benchmark): **943.7 survival ± 55, 7.82 food, median 924 ticks, max 1626, p=0.011 vs heuristic**. Half of episodes survive past 900 ticks. No episode reaches the 10000 cap; the policy buys extra time but is not unbounded.
 
-Mean survival is capped at 1000 for 44% of episodes, so the benchmark mean underestimates the policy's capability. A raised-cap experiment (V10) is running to measure episode lengths without artificial truncation.
+Progression from reward-only to full stack:
+- Heuristic: 768 (mean), 1.19 food
+- E5 (best reward-only): 706 (mean), 0.58 food
+- E5 + frame stacking: 811 (mean), 4.12 food
+- + constant LR (V7_fs): 826 (mean), 3.91 food
+- + head resets (V8_fs_reset): 871 (mean), 6.25 food
+- + strong signals (V9_fs_strong_reset): 868 (mean), 13.55 food, 44% time-limit
+- + uncapped (V10): **944 (mean)**, 7.82 food, 100% death (honest ceiling)
 
 ## Remaining questions
 
-- V10_fs_uncapped (max_steps=10000): how far does the strong-reset policy actually go when not artificially stopped?
-- Why does V9_fs_strong_reset show such a wide seed gap (797-868)? Is reset timing interacting with the phase of learning?
+- Why does V10 show wide seed variance (730 / 854 / 944) and is reset timing interacting with phase of learning?
 - Is there a sweet spot for reset frequency (250K vs 500K vs 1M)?
+- What prevents the agent from surviving indefinitely? Hunger management, unlucky enemy encounters, or inherent policy limitations?

@@ -20,7 +20,7 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-We investigate what it takes to make a DQN agent consistently outperform a scripted heuristic in a multi-objective grid-based survival task, where an agent on a $64 \times 64$ grid must eat food, evade enemies, and use shelters. We organize the investigation as a sequential bottleneck analysis: we iteratively identify what is limiting the agent's performance and test the most principled intervention. Three bottlenecks emerge. First, reward design: we derive four per-step design heuristics from environment mechanics, characterize three reward-hacking failure modes, and show that even exhaustively tuned reward configurations saturate below the heuristic at $706$ mean survival (vs $768$). Second, observation: adding 4-frame temporal context without changing the reward lifts survival to $811$ ($p = 0.007$), but the resulting policy collapses as epsilon and learning rate decay together. Third, training dynamics: periodic resets of the Dueling head (Nikishin et al., 2022) counter the plasticity loss and produce the best agent, reaching $871.7$ mean survival with $34\%$ of episodes hitting the $1000$-tick time limit ($p < 0.0001$). The progression validates a staged diagnostic approach to applying RL in multi-objective domains where no single intervention is sufficient.
+We investigate what it takes to make a DQN agent consistently outperform a scripted heuristic in a multi-objective grid-based survival task, where an agent on a $64 \times 64$ grid must eat food, evade enemies, and use shelters. We organize the investigation as a sequential bottleneck analysis: we iteratively identify what is limiting the agent's performance and test the most principled intervention. Three bottlenecks emerge. First, reward design: we derive four per-step design heuristics from environment mechanics, characterize three reward-hacking failure modes, and show that even exhaustively tuned reward configurations saturate below the heuristic at $706$ mean survival (vs $768$). Second, observation: adding 4-frame temporal context without changing the reward lifts survival to $811$ ($p = 0.007$), but the resulting policy collapses as epsilon and learning rate decay together. Third, training dynamics: periodic resets of the Dueling head \citep{Nikishin2022} counter the plasticity loss and push the agent to $871$ survival with $34\%$ of episodes reaching the $1000$-tick cap ($p < 10^{-4}$). Combining head resets with stronger foraging signals, which alone destabilize the policy, raises the cap-hit rate to $44\%$ and per-episode food consumption to more than eleven times the heuristic's. A final uncapped benchmark (cap raised to $10{,}000$) characterizes the policy's actual ceiling: best-seed mean survival $944$, median $924$, longest single episode $2{,}477$ ticks; no episode reaches the raised cap. The progression validates a staged diagnostic approach to applying RL in multi-objective domains where no single intervention is sufficient.
 \end{abstract}
 
 \tableofcontents
@@ -42,7 +42,7 @@ In multi-objective settings, practitioners typically want to \emph{steer} behavi
 \begin{enumerate}[nosep,leftmargin=1.6em]
   \item \emph{Reward shaping is necessary but saturates}. We derive four per-step design heuristics from environment mechanics (Section~\ref{sec:reward_configs}), document three reward-hacking failure modes, and systematically test the resulting reward landscape. A carefully engineered minimal reward produces the best reward-only agent (706 survival), but no reward configuration matches the heuristic (768 survival).
   \item \emph{The next bottleneck is perceptual}. A single 4-frame stack of the spatial observation, with the reward function held constant, lifts the agent to $811$ survival ($p < 0.01$ vs heuristic) and three times the heuristic's foraging rate. The reward signal was adequate; the agent lacked the temporal information to exploit it.
-  \item \emph{The next bottleneck is training dynamics}. The frame-stacked policy peaks early and then collapses as exploration and learning rate decay together, a failure mode consistent with recent work on primacy bias and plasticity loss \citep{Nikishin2022, Dohare2024}. Periodic resets of the Dueling head, a single simple intervention from \citet{Nikishin2022}, lift the best agent to $871.7$ mean survival with $34\%$ of episodes hitting the $1000$-tick time limit ($p < 10^{-4}$).
+  \item \emph{The next bottleneck is training dynamics}. The frame-stacked policy peaks early and then collapses as exploration and learning rate decay together, a failure mode consistent with recent work on primacy bias and plasticity loss \citep{Nikishin2022, Dohare2024}. Periodic resets of the Dueling head, a single simple intervention from \citet{Nikishin2022}, lift the best agent to $871$ mean survival with $34\%$ of episodes hitting the $1000$-tick cap ($p < 10^{-4}$). Combining resets with stronger foraging signals, which alone destabilize the policy, raises the cap-hit rate to $44\%$. A final uncapped benchmark (cap raised to $10{,}000$) lifts mean survival to $944$ for the best seed, with individual episodes reaching $2{,}477$ ticks.
 \end{enumerate}
 
 Figure~\ref{fig:bottleneck_progression} summarizes the progression. Each stage's intervention is necessary to reach the next stage's result; none of them individually is sufficient. The contribution is not a new RL algorithm but a worked example of how to diagnose what is bottlenecking a DQN agent in a multi-objective task where reward shaping alone does not suffice.
@@ -50,7 +50,7 @@ Figure~\ref{fig:bottleneck_progression} summarizes the progression. Each stage's
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/bottleneck_progression}
-\caption{Sequential bottleneck progression. Each intervention addresses a different bottleneck: removing unused reward components (E5), adding temporal context (frame stacking), preserving plasticity (constant LR), and actively restoring it (periodic head resets). All DQN bars are the best seed of three, benchmarked over $100$ episodes.}
+\caption{Sequential bottleneck progression. Each intervention addresses a different bottleneck: removing unused reward components (E5), adding temporal context (frame stacking), preserving plasticity (constant LR), actively restoring it (periodic head resets), adding stronger foraging signals rescued by resets, and finally lifting the episode cap to measure the policy's true ceiling. All DQN bars are the best seed of three, benchmarked over $100$ episodes. The final ``+ uncapped'' row re-runs both DQN and heuristic at $\mathrm{max\_steps}=10{,}000$; the dashed line marks the $1000$-tick cap used by all earlier rows.}
 \label{fig:bottleneck_progression}
 \end{figure}
 
@@ -522,23 +522,29 @@ We test three interventions, each attacking the failure mode from a different an
 \label{fig:plasticity}
 \end{figure}
 
-Constant LR alone already helps relative to the original V5$_\mathrm{fs}$ trajectory, raising the best benchmark to $826$ survival. Cyclical epsilon further refills the buffer and reaches $858$ in the best seed, but with high seed-to-seed variance. Periodic head resets (V8$_\mathrm{fs,reset}$) produce the strongest and most consistent result: $871.7$ survival, $6.25$ food per episode, $34\%$ of episodes reaching the $1000$-tick time limit ($p < 10^{-4}$). Two of three seeds significantly beat the heuristic. The median episode survives to tick $902$.
+Constant LR alone already helps relative to the original V5$_\mathrm{fs}$ trajectory, raising the best benchmark to $826$ survival. Cyclical epsilon further refills the buffer and reaches $858$ in the best seed, but with high seed-to-seed variance. Periodic head resets (V8$_\mathrm{fs,reset}$) produce the strongest and most consistent single-intervention result: $871.7$ survival, $6.25$ food per episode, $34\%$ of episodes reaching the $1000$-tick time limit ($p < 10^{-4}$). Two of three seeds significantly beat the heuristic. The median episode survives to tick $902$.
+
+\paragraph{Combining resets with stronger signals (V9$_\mathrm{fs,strong\_reset}$).}
+Doubling the food reward and food proximity weight ($w_\text{food} = 0.5$, $w_\text{fprox} = 0.3$) by itself destabilizes the flee behavior and underperforms the heuristic in 2 of 3 seeds (see Table~\ref{tab:results}, row ``E5 + stronger signals''). Adding periodic head resets to the same stronger reward configuration rescues this regime entirely. The best seed reaches $868.2$ survival with $13.55$ food per episode --- more than eleven times the heuristic's consumption --- and $44\%$ time-limit episodes. The reset mechanism does not simply delay collapse; it makes the stronger reward regime viable in the first place. This is consistent with the plasticity diagnosis: periodic re-initialization of the value head prevents the network from over-committing to early (and eventually maladaptive) estimates, even when the reward function otherwise encourages a risky policy.
+
+\paragraph{Final benchmark with the episode cap raised (V10$_\mathrm{fs,uncapped}$).}
+The $44\%$ cap-hit rate in V9$_\mathrm{fs,strong\_reset}$ means mean survival under the $1000$-tick cap is a lower bound on the policy's actual episode length. To characterize the ceiling, we raise $\mathrm{max\_steps}$ from $1000$ to $10{,}000$ and re-train (same seeds, same hyperparameters otherwise) and re-benchmark. The heuristic baseline, re-evaluated at the same cap, has mean survival $770$ and never exceeds $1072$ ticks. The best DQN seed reaches mean $943.7$ with median $924$ and a longest single episode of $1626$ ticks; across all three seeds the longest observed episode is $2477$ ticks. Every seed has $100\%$ death rate: the agent does not survive indefinitely. The V9 $44\%$ cap-hit rate, with the cap lifted, corresponds to episodes that die somewhere between $1000$ and $\sim\!2500$ ticks rather than to unbounded survival. This is the paper's closing measurement: the best policy extends survival by approximately $50$--$100\%$ beyond the $1000$-tick baseline but has a finite effective horizon.
 
 \subsection{Results}
 \label{sec:results}
 
-Table~\ref{tab:results} compiles the benchmark for each bottleneck stage against the heuristic and against the other interventions. Each DQN row is the best seed of three, evaluated over $100$ episodes on seeds $1000$--$1099$ (the same fixed seeds used for the heuristic baseline).
+Table~\ref{tab:results} compiles the benchmark for each bottleneck stage. Each DQN row is the best seed of three, evaluated over $100$ episodes on seeds $1000$--$1099$ (the same fixed seeds used for the heuristic baseline).
 
 \begin{table}[h]
 \centering
-\caption{Bottleneck progression benchmark ($100$ episodes, mean $\pm$ 95\% CI for survival). Each DQN row reports the best-seed result. Significance is a two-sided Welch $t$-test against the heuristic.}
+\caption{Bottleneck progression benchmark ($100$ episodes, mean $\pm$ 95\% CI for survival). Each DQN row reports the best-seed result. All rows use a $1000$-tick episode cap except the final ``+ uncapped'' row, which re-runs both the DQN and the heuristic with the cap raised to $10{,}000$. Significance is a two-sided Welch $t$-test against the heuristic at the matching cap.}
 \label{tab:results}
 \small
 \begin{tabular}{lrrrrr}
 \toprule
 Configuration & Survival & Food & Damage & Time-limit & vs.\ heuristic ($p$) \\
 \midrule
-Heuristic                               & $768 \pm 19$        & $1.19$ & $99.5$ & $5\%$  & --- \\
+Heuristic (cap $1000$)                  & $768 \pm 19$        & $1.19$ & $99.5$ & $5\%$  & --- \\
 \midrule
 \multicolumn{6}{l}{\textit{Bottleneck 1: reward design}} \\
 E4 (9 components)                       & $695 \pm 30$        & $2.19$ & $99.2$ & $0\%$  & $<\!0.001$ \\
@@ -552,12 +558,18 @@ E5 + 4-frame stacking                   & $811 \pm 25$        & $4.12$ & $98.5$ 
 \multicolumn{6}{l}{\textit{Bottleneck 3: training dynamics}} \\
 + constant LR (V7$_\mathrm{fs}$)        & $826 \pm 21$        & $3.91$ & $100$  & $6\%$  & $0.0001$ \\
 + cyclical $\varepsilon$ (V8$_\mathrm{fs,cycle}$) & $859 \pm 28$        & $5.36$ & $95$   & $28\%$ & $<\!0.05$ \\
-+ head resets (V8$_\mathrm{fs,reset}$)  & $\mathbf{871.7 \pm 28}$ & $\mathbf{6.25}$ & $84.7$ & $\mathbf{34\%}$ & $\mathbf{<\!10^{-4}}$ \\
++ head resets (V8$_\mathrm{fs,reset}$)  & $871.7 \pm 28$      & $6.25$  & $84.7$ & $34\%$ & $<\!10^{-4}$ \\
++ stronger signals (alone)              & $788 \pm 32$        & $4.61$  & $98$   & $12\%$ & $0.21$ \\
++ stronger signals + resets (V9)        & $\mathbf{868.2 \pm 32}$ & $\mathbf{13.55}$ & $76.7$ & $\mathbf{44\%}$ & $\mathbf{<\!10^{-4}}$ \\
+\midrule
+\multicolumn{6}{l}{\textit{Cap lifted: $\mathrm{max\_steps}=10{,}000$}} \\
+Heuristic (cap $10{,}000$)              & $770 \pm 20$        & $1.19$  & $100$  & $0\%$  & --- \\
+V10$_\mathrm{fs,uncapped}$ (best seed)  & $\mathbf{943.7 \pm 55}$ & $7.82$  & $115$  & $0\%$  & $\mathbf{0.011}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Each stage's intervention produces an improvement on top of the previous stage. The reward search saturates at $706$; frame stacking alone lifts that to $811$; constant LR lifts it to $826$; cyclical $\varepsilon$ and head resets each lift it further. The cumulative gain from baseline E5 to V8$_\mathrm{fs,reset}$ is $+165$ survival and a $34$-fold increase in the $1000$-tick episode rate.
+Each stage's intervention produces an improvement on top of the previous stage. The reward search saturates at $706$; frame stacking alone lifts that to $811$; the plasticity interventions lift the capped mean to $872$ and push the cap-hit rate from $0\%$ to $44\%$. Raising the cap exposes a ceiling closer to $944$ for the best seed, with individual episodes reaching $2477$ ticks. The cumulative gain from reward-only E5 to the final V10 uncapped benchmark is $+237$ ticks, or $+34\%$.
 
 \subsection{Summary of Observations}
 \label{sec:analysis}
@@ -577,10 +589,16 @@ PBRS delta proximity rewards depend on position changes, but the single-frame ob
 The collapse occurs with the same reward function that produced the peak. Fixing it requires either preserving plasticity (constant LR), actively refreshing it (head resets), or preventing the buffer bias that drives it (cyclical $\varepsilon$).
 
 \paragraph{Head resets provide the largest single gain.}
-A periodic re-initialization of just the Dueling head, keeping the CNN encoder and replay buffer, produced the highest individual seed ($871$ survival) and the highest $1000$-tick rate ($34\%$). This aligns with \citet{Nikishin2022}'s finding that targeted resets are a simple and reliable counter to primacy bias.
+A periodic re-initialization of just the Dueling head, keeping the CNN encoder and replay buffer, produced the highest individual seed among single interventions ($871$ survival) and the highest $1000$-tick cap-hit rate before combining with stronger signals ($34\%$). This aligns with \citet{Nikishin2022}'s finding that targeted resets are a simple and reliable counter to primacy bias.
+
+\paragraph{Head resets rescue otherwise-destabilizing reward signals.}
+Doubling the food and food-proximity weights alone ($w_\text{food}=0.5$, $w_\text{fprox}=0.3$) underperforms the heuristic in 2 of 3 seeds. Adding head resets to the same stronger reward configuration raises mean survival to $868$ and per-episode food consumption to $13.55$ (more than eleven times the heuristic). The reset mechanism is not simply a plasticity patch; it widens the range of reward functions under which Rainbow-lite DQN can train without collapsing.
 
 \paragraph{Frame stacking enables foraging.}
 The only modification that produces foraging behavior competitive with the heuristic is frame stacking. The reward function is unchanged; only the observation changes. The frame-stacking agent eats 4.12 food per episode (vs 0.66 without), but the foraging policy is transient: survival peaks early in training (856--867 at step 350K) and declines as training continues. The best checkpoint captures this transient behavior.
+
+\paragraph{The agent extends survival but is not unbounded.}
+Raising the episode cap from $1000$ to $10{,}000$ ticks reveals a finite ceiling. Every seed has a $100\%$ death rate; no episode approaches the raised cap; the longest single episode observed is $2477$ ticks. The $44\%$ cap-hit rate at the $1000$-tick cap corresponds to episodes that die between $1000$ and $\sim\!2500$ ticks, not to infinite survival. The best agent's median episode is $924$ ticks, roughly $20\%$ longer than the heuristic's $754$.
 
 \paragraph{Delta proximity does not cause hovering.}
 Absolute proximity would reward the agent for being near food, creating the hovering failure mode (Section~\ref{sec:failure_modes}). Delta proximity rewards only the change in distance. All engineered configurations use delta proximity, and none exhibit hovering.
@@ -623,11 +641,13 @@ Reward shaping turned out to be necessary but not sufficient. We derived four pe
 
 The next bottleneck was the observation. A single 4-frame stack, added without touching the reward function, lifted the agent to $811$ survival with $p = 0.007$, and tripled its foraging rate. The reward had been adequate; temporal context was missing.
 
-The final bottleneck was training dynamics. The frame-stacked policy peaked early and regressed as exploration and learning rate decayed together, a failure mode consistent with recent work on primacy bias and plasticity loss. Of three targeted interventions (constant LR, cyclical $\varepsilon$, Nikishin-style head resets), head resets produced the strongest and most stable result: $871.7$ mean survival with $34\%$ of episodes reaching the $1000$-tick time limit, significantly better than the heuristic ($p < 10^{-4}$).
+The final bottleneck was training dynamics. The frame-stacked policy peaked early and regressed as exploration and learning rate decayed together, a failure mode consistent with recent work on primacy bias and plasticity loss. Of three targeted interventions (constant LR, cyclical $\varepsilon$, Nikishin-style head resets), head resets produced the strongest single-intervention result: $871$ mean survival with $34\%$ of episodes reaching the $1000$-tick cap, significantly better than the heuristic ($p < 10^{-4}$). Combining head resets with stronger foraging signals --- which by themselves destabilize the policy --- raised the cap-hit rate to $44\%$ and per-episode foraging to more than eleven times the heuristic's.
+
+Lifting the episode cap from $1000$ to $10{,}000$ characterizes the policy's actual ceiling: best-seed mean survival $944$, median $924$, longest single episode $2477$ ticks, $100\%$ death rate. The agent does not survive indefinitely; it extends survival by roughly $50$--$100\%$ beyond the baseline and eventually dies. Compared with the best reward-only agent (E5 at $706$), the cumulative improvement is $+237$ ticks, driven by interventions outside the reward function itself.
 
 The specific numbers are tied to this environment, but the methodology --- iteratively identify what is limiting the agent and test the most principled intervention --- transfers. For practitioners building RL agents in multi-objective domains, the ordering reward $\rightarrow$ observation $\rightarrow$ dynamics is a useful default sequence to check, not a generic claim of what always matters.
 
-Future work includes replicating on a second environment to probe the generality of the ordering, running the combined cyclical-$\varepsilon$-plus-reset variant that we have not yet benchmarked, and testing whether state-dependent exploration (NoisyNet) can replace both the cyclical schedule and the reset mechanism with a single learned alternative.
+Future work includes replicating on a second environment to probe the generality of the ordering, sweeping the head-reset frequency around the current $500$K value, and testing whether state-dependent exploration (NoisyNet) can replace both the cyclical schedule and the reset mechanism with a single learned alternative.
 
 % =============================================================================
 % References
