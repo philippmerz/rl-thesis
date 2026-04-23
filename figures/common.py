@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -84,16 +83,3 @@ def save_figure(fig: plt.Figure, name: str) -> Path:
     return path
 
 
-def best_seed_for(config: str, seeds: Iterable[int] = (42, 43, 44)) -> int | None:
-    """Return the seed whose best eval survival is highest, or None if no data."""
-    best_val = -np.inf
-    best_seed = None
-    for seed in seeds:
-        df = load_eval(config, seed)
-        if df.empty:
-            continue
-        peak = df["eval_survival"].max()
-        if peak > best_val:
-            best_val = peak
-            best_seed = seed
-    return best_seed
