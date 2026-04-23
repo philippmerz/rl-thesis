@@ -20,14 +20,16 @@ from figures.common import PALETTE, save_figure, setup_style
 # All rows use a 1000-tick episode cap except the final V10 row, which
 # raises the cap to 10000 and re-runs both DQN and heuristic at that cap.
 RESULTS = [
-    # (label, survival_mean, food, time_limit_pct, color)
-    ("Heuristic",            768.1, 1.19,  5.0, PALETTE.heuristic),
-    ("E5\n(minimal reward)",  706.0, 0.58,  0.0, PALETTE.e5),
-    ("+ frame stacking",     811.0, 4.12, 12.0, PALETTE.e5_fs),
-    ("+ constant LR",        826.1, 3.91,  6.0, PALETTE.v7_fs),
-    ("+ head resets",        871.7, 6.25, 34.0, PALETTE.v8_reset),
-    ("+ stronger signals",   868.2, 13.55, 44.0, PALETTE.v8_strong),
-    ("+ uncapped\n(max=10K)", 943.7, 7.82,  0.0, PALETTE.v8_cycle),
+    # (label, survival_mean, food, max_episode, color)
+    # All DQN rows are best-seed results at cap=50000 (except E5 which uses
+    # cap=1000; neither cap is ever approached).
+    ("Heuristic",            768.1, 1.19, 1000,  PALETTE.heuristic),
+    ("E5\n(minimal reward)",  706.0, 0.58, 1000,  PALETTE.e5),
+    ("+ frame stacking",     829.7, 4.28, 1371,  PALETTE.e5_fs),
+    ("+ constant LR",        836.2, 6.29, 1764,  PALETTE.v7_fs),
+    ("+ cyclical $\\varepsilon$", 877.1, 4.47, 1873, PALETTE.v8_cycle),
+    ("+ head resets",        905.3, 6.73, 1899,  PALETTE.v8_reset),
+    ("+ stronger signals\n+ resets", 943.7, 7.82, 2477, PALETTE.v8_strong),
 ]
 
 
@@ -38,18 +40,16 @@ def make_figure():
     labels = [r[0] for r in RESULTS]
     survival = [r[1] for r in RESULTS]
     food = [r[2] for r in RESULTS]
-    tlimit = [r[3] for r in RESULTS]
+    max_ep = [r[3] for r in RESULTS]
     colors = [r[4] for r in RESULTS]
     x = np.arange(len(labels))
 
-    # Survival
+    # Mean survival (best seed)
     ax = axes[0]
     bars = ax.bar(x, survival, color=colors, edgecolor="black", linewidth=0.5)
-    ax.axhline(1000, color="black", linestyle=":", linewidth=0.8, alpha=0.6)
-    ax.text(len(labels) - 0.5, 1000, "1000-tick cap", ha="right", va="bottom", fontsize=8)
-    ax.set_ylim(600, 1050)
+    ax.set_ylim(600, 1000)
     ax.set_ylabel("Mean survival (ticks)")
-    ax.set_title("Episode survival")
+    ax.set_title("Episode survival (best seed)")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=35, ha="right")
     for bar, val in zip(bars, survival):
@@ -65,18 +65,18 @@ def make_figure():
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=35, ha="right")
     for xi, v in zip(x, food):
-        ax.text(xi, v + 0.25, f"{v:.2f}", ha="center", va="bottom", fontsize=8)
+        ax.text(xi, v + 0.15, f"{v:.2f}", ha="center", va="bottom", fontsize=8)
 
-    # Time-limit rate
+    # Longest single episode
     ax = axes[2]
-    ax.bar(x, tlimit, color=colors, edgecolor="black", linewidth=0.5)
-    ax.set_ylim(0, 50)
-    ax.set_ylabel("Time-limit episodes (%)")
-    ax.set_title("Capped-ceiling episodes")
+    ax.bar(x, max_ep, color=colors, edgecolor="black", linewidth=0.5)
+    ax.set_ylim(0, max(max_ep) * 1.15)
+    ax.set_ylabel("Max episode (ticks)")
+    ax.set_title("Longest observed episode")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=35, ha="right")
-    for xi, v in zip(x, tlimit):
-        ax.text(xi, v + 1.0, f"{v:.0f}%", ha="center", va="bottom", fontsize=8)
+    for xi, v in zip(x, max_ep):
+        ax.text(xi, v + 50, f"{v:,}", ha="center", va="bottom", fontsize=8)
 
     return fig
 
