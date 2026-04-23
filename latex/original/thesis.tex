@@ -540,12 +540,13 @@ Table~\ref{tab:results} compiles the benchmark for each bottleneck stage. Each D
 
 \begin{table}[h]
 \centering
-\caption{Bottleneck progression benchmark ($100$ episodes, mean $\pm$ 95\% CI for survival). Each DQN row reports the best seed of three. Reward shaping experiments use a $1{,}000$-tick episode cap; frame-stacking and dynamics experiments use a $50{,}000$-tick cap (never approached by any policy, see Section~\ref{sec:world_design}). Significance is a two-sided Welch $t$-test against the heuristic at the matching cap. The ``Max episode'' column reports the longest single episode across all three seeds.}
+\caption{Bottleneck progression benchmark ($100$ episodes, mean $\pm$ 95\% CI for survival). Each DQN row reports the best seed of three. Reward shaping experiments use a $1{,}000$-tick episode cap; frame-stacking and dynamics experiments use a $50{,}000$-tick cap (never approached by any policy, see Section~\ref{sec:world_design}). The ``Max episode'' column reports the longest single episode across all three seeds. The $p$ column is a two-sided Welch $t$-test against the heuristic at the matching cap.}
 \label{tab:results}
-\small
+\footnotesize
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrrrrr}
 \toprule
-Configuration & Survival & Food & Damage & Max episode & vs.\ heuristic ($p$) \\
+Configuration & Survival & Food & Damage & Max episode & $p$ \\
 \midrule
 \multicolumn{6}{l}{\textit{Reward shaping (cap 1{,}000)}} \\
 Heuristic                               & $768 \pm 19$       & $1.19$ & $99.5$  & $1{,}000$       & --- \\
