@@ -68,10 +68,6 @@ def train(
         0, "--demos",
         help="Number of heuristic demonstration episodes to pre-load (0=disabled)",
     ),
-    bc_episodes: int = typer.Option(
-        0, "--bc-episodes",
-        help="Number of heuristic episodes for behavioral cloning pre-training (0=disabled)",
-    ),
     epsilon_start: float = typer.Option(
         None, "--epsilon-start",
         help="Override initial epsilon (useful after BC pre-training, e.g. 0.1)",
@@ -97,7 +93,7 @@ def train(
     dqn = make_dqn_config(config, **cli_overrides)
     run_single(config_name=config, seed=seed, dqn_config=dqn,
                checkpoint=resume, warm_start=warm_start,
-               demo_episodes=demos, bc_episodes=bc_episodes)
+               demo_episodes=demos)
 
 
 @app.command(name="train-grid")
