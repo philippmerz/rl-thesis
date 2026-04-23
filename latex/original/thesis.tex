@@ -540,7 +540,7 @@ Table~\ref{tab:results} compiles the benchmark for each bottleneck stage. Each D
 
 \begin{table}[h]
 \centering
-\caption{Bottleneck progression benchmark ($100$ episodes, mean $\pm$ 95\% CI for survival). Each DQN row reports the best seed of three. Reward shaping experiments use a $1{,}000$-tick episode cap; frame-stacking and dynamics experiments use a $50{,}000$-tick cap (never approached by any policy, see Section~\ref{sec:world_design}). The ``Max episode'' column reports the longest single episode across all three seeds. The $p$ column is a two-sided Welch $t$-test against the heuristic at the matching cap.}
+\caption{Bottleneck progression benchmark ($100$ episodes, mean $\pm$ 95\% CI for survival). Each DQN row reports the best seed of three. Rows marked $\dagger$ were trained and evaluated with a $1{,}000$-tick episode cap; all others use a $50{,}000$-tick cap. The cap is non-binding in practice for every row in the table: heuristic and reward-shaping policies die before step $1{,}000$ in $\geq 99\%$ of episodes, and the one marginal ablation (stronger signals alone) hits the cap in $12\%$ of seed-$42$ episodes but still underperforms the heuristic. The heuristic is essentially identical at both caps ($768 \pm 19$ at $1{,}000$, $770 \pm 20$ at $50{,}000$); we quote the $50{,}000$-cap reference. The ``Max episode'' column reports the longest single episode across all three seeds. The $p$ column is a two-sided Welch $t$-test against the heuristic.}
 \label{tab:results}
 \footnotesize
 \setlength{\tabcolsep}{4pt}
@@ -548,15 +548,12 @@ Table~\ref{tab:results} compiles the benchmark for each bottleneck stage. Each D
 \toprule
 Configuration & Survival & Food & Damage & Max episode & $p$ \\
 \midrule
-\multicolumn{6}{l}{\textit{Reward shaping (cap 1{,}000)}} \\
-Heuristic                               & $768 \pm 19$       & $1.19$ & $99.5$  & $1{,}000$       & --- \\
-E4 (9 components)                       & $695 \pm 30$       & $2.19$ & $99.2$  & $\leq 1{,}000$  & $<\!0.001$ \\
-E5 (minimal, 4 components)              & $706 \pm 19$       & $0.58$ & $10.4$  & $\leq 1{,}000$  & $<\!0.001$ \\
-E5 + food reward ($w_\text{food}=5$)    & $470 \pm 26$       & $0.81$ & $100$   & $\leq 1{,}000$  & $<\!0.001$ \\
-E5 + extended training (5M)             & $699 \pm 16$       & $0.39$ & $100$   & $\leq 1{,}000$  & $<\!0.001$ \\
-\midrule
-\multicolumn{6}{l}{\textit{Frame stacking and training dynamics (cap 50{,}000)}} \\
 Heuristic                               & $770 \pm 20$       & $1.19$ & $100$   & $1{,}072$       & --- \\
+E4 (9 components)$^\dagger$             & $695 \pm 30$       & $2.19$ & $99.2$  & $\leq 1{,}000$  & $<\!0.001$ \\
+E5 (minimal, 4 components)$^\dagger$    & $706 \pm 19$       & $0.58$ & $10.4$  & $\leq 1{,}000$  & $<\!0.001$ \\
+E5 + food reward ($w_\text{food}=5$)$^\dagger$
+                                        & $470 \pm 26$       & $0.81$ & $100$   & $\leq 1{,}000$  & $<\!0.001$ \\
+E5 + extended training (5M)$^\dagger$   & $699 \pm 16$       & $0.39$ & $100$   & $\leq 1{,}000$  & $<\!0.001$ \\
 E5 + 4-frame stacking (V5$_\mathrm{fs}$)
                                         & $829.7 \pm 29$     & $4.28$ & $101$   & $1{,}371$       & $0.03$ \\
 \quad + constant LR (V7$_\mathrm{fs}$)
@@ -565,14 +562,15 @@ E5 + 4-frame stacking (V5$_\mathrm{fs}$)
                                         & $877.1 \pm 38$     & $4.47$ & $102$   & $1{,}873$       & $<\!0.001$ \\
 \quad + head resets (V8$_\mathrm{fs,reset}$)
                                         & $905.3 \pm 52$     & $6.73$ & $106$   & $1{,}899$       & $<\!0.001$ \\
-\quad + stronger signals (alone, cap $1{,}000$) & $788 \pm 32$       & $4.61$ & $98$    & $\leq 1{,}000$  & $0.21$ \\
+\quad + stronger signals (alone)$^\dagger$
+                                        & $788 \pm 32$       & $4.61$ & $98$    & $\leq 1{,}000$  & $0.21$ \\
 \quad + stronger signals + resets (V9$_\mathrm{fs,strong\_reset}$)
                                         & $\mathbf{943.7 \pm 55}$ & $\mathbf{7.82}$ & $108$ & $\mathbf{2{,}477}$ & $\mathbf{0.011}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Three of the six cap-$50{,}000$ configurations (V8$_\mathrm{fs,cycle}$, V8$_\mathrm{fs,reset}$, V9$_\mathrm{fs,strong\_reset}$) have one or two seeds that individually regress below the heuristic. The best-seed numbers quoted above are therefore the top of a wide distribution, not the expected outcome of a fresh training run. By contrast, V7$_\mathrm{fs}$ has all three seeds between $829.6$ and $836.2$, all significantly beating the heuristic.
+Three of the frame-stacking configurations (V8$_\mathrm{fs,cycle}$, V8$_\mathrm{fs,reset}$, V9$_\mathrm{fs,strong\_reset}$) have one or two seeds that individually regress below the heuristic. The best-seed numbers quoted above are therefore the top of a wide distribution, not the expected outcome of a fresh training run. By contrast, V7$_\mathrm{fs}$ has all three seeds between $829.6$ and $836.2$, all significantly beating the heuristic.
 
 Each stage's intervention improves the best-seed result over the previous stage. The reward search saturates at $706$; frame stacking alone lifts the best seed to $830$; constant LR preserves this ($836$) with the tightest seed variance of any configuration; more aggressive dynamics interventions reach $877$, $905$, and finally $944$ with stronger foraging signals, but each introduces seed instability. The cumulative gain from reward-only E5 to the best seed of V9$_\mathrm{fs,strong\_reset}$ is $+238$ ticks, or $+34\%$, with the caveat that two of three V9 seeds fall short of $944$ (at $731$ and $854$).
 
