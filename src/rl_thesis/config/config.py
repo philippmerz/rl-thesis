@@ -83,7 +83,7 @@ class WorldConfig:
         g = self.observation_grid_size
         return self.num_spatial_channels * g * g + self.num_scalars
 
-    # Reward shaping (satisfies constraints C1-C7, see reward_configs.py)
+    # Reward shaping (satisfies constraints C1-C7, see experiment_configs.py)
     reward_food_eaten: float = 5.0
     reward_survival_tick: float = 0.0
     reward_death: float = -10.0

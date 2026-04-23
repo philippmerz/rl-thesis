@@ -188,3 +188,202 @@ Not "consistently 1000 ticks" but a ~13% improvement in mean survival and ~7x im
 - Would combining cyclical epsilon + head resets work better than either alone?
 - Would longer resets (every 250K) or fewer (every 1M) work better?
 - Can we push past 35% time-limit without architectural changes beyond DQN?
+
+## Appendix: Historical configurations
+
+The configs in this appendix were run during the investigation but are not part of the final thesis narrative: each either failed to clear a bar that a later config cleared, or tested a hypothesis that was ruled out. The dicts below are the exact overrides they applied to `WorldConfig` defaults (plus `_dqn` overrides on `DQNConfig` where shown). They have been removed from `src/rl_thesis/config/experiment_configs.py`; this appendix preserves them for reproducibility.
+
+### Reward-shaping dead ends
+
+**`engineered_v2`** — Hunger conservation attempt. Raise `low_hunger_threshold` to 50%, add `hunger_proportional=-0.02`, stronger `shelter_safety` (0.3), stronger `food_eaten` (10.0). Outcome: hunger-proportional penalty at `-0.02` fought the movement cost and the agent regressed below v1.
+
+```python
+"engineered_v2": {
+    "reward_hunger_proportional": -0.02,
+    "reward_low_hunger": -0.5,
+    "low_hunger_threshold": 0.5,
+    "reward_food_eaten": 10.0,
+    "reward_food_visible_proximity": 0.15,
+    "reward_enemy_damage_taken": -0.5,
+    "reward_enemy_proximity": -0.5,
+    "reward_shelter_safety": 0.3,
+},
+```
+
+**`engineered_v3`** — Conditional proximity gating: food proximity only when hungry; shelter behaviour dominant when well-fed. Outcome: 620--680 survival plateau, same as v1/v2. Ruled in as a useful idea (kept in later configs via `proximity_only_when_hungry`), but this specific tuning did not beat v1.
+
+```python
+"engineered_v3": {
+    "reward_hunger_proportional": 0.0,
+    "reward_low_hunger": -0.5,
+    "low_hunger_threshold": 0.5,
+    "reward_food_eaten": 8.0,
+    "reward_food_visible_proximity": 0.15,
+    "proximity_only_when_hungry": True,
+    "reward_enemy_damage_taken": -0.5,
+    "reward_enemy_proximity": -0.5,
+    "reward_shelter_safety": 0.2,
+},
+```
+
+**`engineered_v6_n10`** — Extend n-step return horizon from 5 to 10, holding `food_eaten=5.0`. Hypothesis: longer credit assignment propagates the food reward further back through an approach trajectory. Outcome: same collapse as `food_eaten=5.0` at n=5. The issue was reward magnitude, not credit-assignment horizon.
+
+```python
+"engineered_v6_n10": {
+    "reward_food_eaten": 5.0,
+    "reward_starvation_damage": 0.0,
+    "reward_hunger_proportional": 0.0,
+    "reward_low_hunger": 0.0,
+    "low_hunger_threshold": 0.5,
+    "reward_food_visible_proximity": 0.15,
+    "proximity_only_when_hungry": True,
+    "reward_enemy_damage_taken": 0.0,
+    "reward_enemy_proximity": -0.5,
+    "reward_shelter_proximity": 0.15,
+    "reward_shelter_safety": 0.0,
+    "reward_survival_tick": 0.0,
+    "_dqn": {"n_step": 10},
+},
+```
+
+**`engineered_v7`** — Calibrated `food_eaten=2.0` plus `damage_taken=-0.3`, on the V5 reward scaffold. Outcome: still too large; foraging trips dominated the flee gradient and survival regressed.
+
+```python
+"engineered_v7": {
+    "reward_food_eaten": 2.0,
+    "reward_starvation_damage": 0.0,
+    "reward_hunger_proportional": 0.0,
+    "reward_low_hunger": 0.0,
+    "low_hunger_threshold": 0.5,
+    "reward_food_visible_proximity": 0.15,
+    "proximity_only_when_hungry": True,
+    "reward_enemy_damage_taken": -0.3,
+    "reward_enemy_proximity": -0.5,
+    "reward_shelter_proximity": 0.15,
+    "reward_shelter_safety": 0.0,
+    "reward_survival_tick": 0.0,
+},
+```
+
+**`engineered_v7_cur_p1` / `engineered_v7_cur`** — Two-phase curriculum: train foraging with enemies suppressed (phase 1), then warm-start into the full environment (phase 2). Outcome: the foraging policy learned without enemies did not transfer; phase 2 benchmarked at 685 survival, below E5. Curriculum abandoned.
+
+```python
+"engineered_v7_cur_p1": {
+    "reward_food_eaten": 2.0,
+    "reward_starvation_damage": 0.0,
+    "reward_hunger_proportional": 0.0,
+    "reward_low_hunger": 0.0,
+    "low_hunger_threshold": 0.5,
+    "reward_food_visible_proximity": 0.15,
+    "proximity_only_when_hungry": True,
+    "reward_enemy_damage_taken": -0.3,
+    "reward_enemy_proximity": -0.5,
+    "reward_shelter_proximity": 0.15,
+    "reward_shelter_safety": 0.0,
+    "reward_survival_tick": 0.0,
+    "max_enemy_density": 0.0,
+    "initial_enemy_fraction": 0.0,
+    "enemy_spawn_rate": 0.0,
+},
+
+"engineered_v7_cur": {
+    "reward_food_eaten": 2.0,
+    "reward_starvation_damage": 0.0,
+    "reward_hunger_proportional": 0.0,
+    "reward_low_hunger": 0.0,
+    "low_hunger_threshold": 0.5,
+    "reward_food_visible_proximity": 0.15,
+    "proximity_only_when_hungry": True,
+    "reward_enemy_damage_taken": -0.3,
+    "reward_enemy_proximity": -0.5,
+    "reward_shelter_proximity": 0.15,
+    "reward_shelter_safety": 0.0,
+    "reward_survival_tick": 0.0,
+},
+```
+
+### Frame-stacking / dynamics dead ends
+
+**`engineered_v6_fs_g1`** — V5_fs with `gamma=1.0` plus `survival_tick=0.005` and `epsilon_end=0.05`. Hypothesis: V5_fs's collapse was discount-blindness to long-horizon death; removing the discount should make survival explicitly valuable. Outcome: `gamma=1` worsened late-training dynamics; the collapse was a plasticity/buffer problem, not a discount problem. This run is what motivated the shift from reward interventions to training-dynamics interventions.
+
+```python
+"engineered_v6_fs_g1": {
+    "reward_food_eaten": 0.0,
+    "reward_starvation_damage": 0.0,
+    "reward_hunger_proportional": 0.0,
+    "reward_low_hunger": 0.0,
+    "low_hunger_threshold": 0.5,
+    "reward_food_visible_proximity": 0.15,
+    "proximity_only_when_hungry": True,
+    "reward_enemy_damage_taken": 0.0,
+    "reward_enemy_proximity": -0.5,
+    "reward_shelter_proximity": 0.15,
+    "reward_shelter_safety": 0.0,
+    "reward_survival_tick": 0.005,
+    "_dqn": {
+        "frame_stack": 4,
+        "total_timesteps": 5_000_000,
+        "epsilon_decay_steps": 1_000_000,
+        "epsilon_end": 0.05,
+        "buffer_size": 250_000,
+        "tau": 0.002,
+        "gamma": 1.0,
+    },
+},
+```
+
+**`engineered_v5_long`** — E5 with 5M training steps (2.5x default), buffer raised to 1M, slower target updates. Hypothesis: the policy simply hadn't converged. Outcome: no improvement; peak survival stayed at ~715 and then slowly declined. Extended training by itself does not fix the collapse.
+
+```python
+"engineered_v5_long": {
+    "reward_food_eaten": 0.0,
+    "reward_starvation_damage": 0.0,
+    "reward_hunger_proportional": 0.0,
+    "reward_low_hunger": 0.0,
+    "low_hunger_threshold": 0.5,
+    "reward_food_visible_proximity": 0.15,
+    "proximity_only_when_hungry": True,
+    "reward_enemy_damage_taken": 0.0,
+    "reward_enemy_proximity": -0.5,
+    "reward_shelter_proximity": 0.15,
+    "reward_shelter_safety": 0.0,
+    "reward_survival_tick": 0.0,
+    "_dqn": {
+        "total_timesteps": 5_000_000,
+        "epsilon_decay_steps": 1_000_000,
+        "buffer_size": 1_000_000,
+        "tau": 0.002,
+    },
+},
+```
+
+**`engineered_v9_fs_cycle_reset`** — Cyclical epsilon plus head resets on top of V7_fs. Hypothesis: the two V8 interventions should compose (buffer diversity + network plasticity). Outcome: did not compose cleanly; the combination was no better than head resets alone and was superseded by `engineered_v9_fs_strong_reset` (stronger signals + resets), which did compose well.
+
+```python
+"engineered_v9_fs_cycle_reset": {
+    "reward_food_eaten": 0.3,
+    "reward_starvation_damage": 0.0,
+    "reward_hunger_proportional": 0.0,
+    "reward_low_hunger": 0.0,
+    "low_hunger_threshold": 0.5,
+    "reward_food_visible_proximity": 0.15,
+    "proximity_only_when_hungry": True,
+    "reward_enemy_damage_taken": 0.0,
+    "reward_enemy_proximity": -0.5,
+    "reward_shelter_proximity": 0.15,
+    "reward_shelter_safety": 0.0,
+    "reward_survival_tick": 0.0,
+    "_dqn": {
+        "frame_stack": 4,
+        "total_timesteps": 2_000_000,
+        "epsilon_decay_steps": 500_000,
+        "epsilon_end": 0.05,
+        "epsilon_cycle_steps": 500_000,
+        "epsilon_cycle_peak": 0.5,
+        "buffer_size": 250_000,
+        "tau": 0.002,
+        "lr_schedule": "constant",
+        "head_reset_freq": 500_000,
+    },
+},
+```
