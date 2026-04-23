@@ -812,11 +812,6 @@ def make_dqn_config(config_name: str, **cli_overrides: Any) -> DQNConfig:
     return replace(DQNConfig(), **merged) if merged else DQNConfig()
 
 
-def get_config_names() -> list[str]:
-    """Return all registered experiment config names."""
-    return list(EXPERIMENT_CONFIGS.keys())
-
-
 def describe_config(config_name: str) -> Dict[str, Any]:
     """Return the explicit overrides defined for this config.
 
