@@ -7,7 +7,7 @@ import shutil
 import sys
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Callable, Dict, Any
+from typing import TYPE_CHECKING, Optional, Dict
 
 import numpy as np
 from tqdm import tqdm
@@ -62,8 +62,6 @@ class Trainer:
 
         self._frame_stack = dqn_config.frame_stack
 
-        self.on_episode_end: Optional[Callable[[int, Dict], None]] = None
-        self.on_checkpoint: Optional[Callable[[int, str], None]] = None
         self._latest_checkpoint_step = self._discover_latest_checkpoint_step()
         self._best_eval_survival = -float('inf')
         self._show_progress = sys.stdout.isatty()
@@ -107,7 +105,6 @@ class Trainer:
     def train(
         self,
         total_steps: Optional[int] = None,
-        eval_callback: Optional[Callable] = None,
     ) -> MetricsLogger:
         total_steps = total_steps or self.dqn_config.total_timesteps
         start_step = self.agent.steps_done
@@ -179,9 +176,6 @@ class Trainer:
                 episode_stats = self.env.get_episode_stats()
                 self.metrics.log_episode(step, episode_stats)
 
-                if self.on_episode_end:
-                    self.on_episode_end(episode_count, episode_stats)
-
                 if not terminated:
                     self.agent.discard_pending()
 
@@ -193,7 +187,6 @@ class Trainer:
             if step > 0 and step % self.dqn_config.eval_freq == 0:
                 eval_results = self.evaluate(
                     num_episodes=self.dqn_config.eval_episodes,
-                    callback=eval_callback,
                 )
                 avg_loss = float(np.mean(recent_losses)) if recent_losses else 0.0
                 self.metrics.log_eval(
@@ -215,9 +208,7 @@ class Trainer:
 
             # Periodic checkpointing
             if step > 0 and step % self.dqn_config.checkpoint_freq == 0:
-                checkpoint_path = self._save_periodic_checkpoint(step)
-                if self.on_checkpoint:
-                    self.on_checkpoint(step, checkpoint_path)
+                self._save_periodic_checkpoint(step)
 
             # Periodic head reset (Nikishin 2022) to counter primacy bias
             reset_freq = self.dqn_config.head_reset_freq
@@ -244,7 +235,6 @@ class Trainer:
     def evaluate(
         self,
         num_episodes: int = 10,
-        callback: Optional[Callable] = None,
     ) -> Dict[str, float]:
         """Run greedy evaluation episodes and return aggregate metrics."""
         eval_env = self._make_env(self.world_config, self.dqn_config)
@@ -264,8 +254,6 @@ class Trainer:
 
             while True:
                 action = self.agent.select_action(state, training=False)
-                if callback:
-                    callback(eval_env, state, action, ep_steps)
 
                 next_state, reward, terminated, truncated, info = eval_env.step(action)
 
