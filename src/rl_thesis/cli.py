@@ -50,31 +50,15 @@ def train(
     ),
     warm_start: str = typer.Option(
         None, "--warm-start",
-        help="Path to checkpoint for weight initialization only (fresh optimizer/schedule/epsilon)",
+        help="Path to checkpoint for weight initialization only (fresh optimizer/epsilon)",
     ),
     steps: int = typer.Option(
         None, "--steps",
         help="Override total timesteps (default from DQNConfig)",
     ),
-    lr_schedule: str = typer.Option(
-        "onecycle", "--lr-schedule",
-        help="LR schedule: 'onecycle' or 'constant'",
-    ),
     eval_episodes: int = typer.Option(
         None, "--eval-episodes",
         help="Override number of evaluation episodes",
-    ),
-    demos: int = typer.Option(
-        0, "--demos",
-        help="Number of heuristic demonstration episodes to pre-load (0=disabled)",
-    ),
-    epsilon_start: float = typer.Option(
-        None, "--epsilon-start",
-        help="Override initial epsilon (e.g. 0.1 when warm-starting from a checkpoint)",
-    ),
-    n_step: int = typer.Option(
-        None, "--n-step",
-        help="Override n-step return horizon (default 5)",
     ),
 ):
     """Train a single (config, seed) run."""
@@ -83,17 +67,13 @@ def train(
 
     cli_overrides = {
         k: v for k, v in {
-            "lr_schedule": lr_schedule,
             "total_timesteps": steps,
             "eval_episodes": eval_episodes,
-            "epsilon_start": epsilon_start,
-            "n_step": n_step,
         }.items() if v is not None
     }
     dqn = make_dqn_config(config, **cli_overrides)
     run_single(config_name=config, seed=seed, dqn_config=dqn,
-               checkpoint=resume, warm_start=warm_start,
-               demo_episodes=demos)
+               checkpoint=resume, warm_start=warm_start)
 
 
 @app.command()

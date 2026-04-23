@@ -1,18 +1,18 @@
 """Named experiment configurations.
 
-Each entry defines one reproducible experiment. A config may override:
+Each entry defines one reproducible experiment. A config dict contains
+WorldConfig reward-field overrides (``reward_*``, ``proximity_delta``,
+``movement_cost``, etc.) plus an optional top-level ``frame_stack``
+entry that overrides :class:`DQNConfig.frame_stack`.
 
-- WorldConfig fields: reward weights, world mechanics (movement cost,
-  enemy density, spawn rates), observation parameters.
-- DQNConfig fields: hyperparameters such as ``frame_stack``, ``gamma``,
-  ``lr_schedule``, ``head_reset_freq``, ``epsilon_cycle_steps``, etc.
+Nothing else is overridable from a config. All other training
+hyperparameters (learning rate, buffer size, tau, epsilon schedule,
+n-step horizon, total timesteps) are fixed at the :class:`DQNConfig`
+defaults across every experiment so that the ablation has a single
+axis of variation in DQN space (``frame_stack``) and an axis of
+variation in reward space.
 
-The two override sets are separated by an optional ``_dqn`` key: any
-top-level key applies to WorldConfig, and entries under ``_dqn`` apply
-to DQNConfig. Use :func:`make_world_config` and :func:`make_dqn_config`
-to materialize both.
-
-Reward Feasibility Constraints
+Reward feasibility constraints
 ==============================
 
 Environment constants (from WorldConfig defaults):
@@ -38,14 +38,14 @@ C1  Anti-stasis: one step toward food must yield more proximity
 
         w_prox > |w_hprop| * c * (D + 1) / u_max
 
-    forage:  0.1  > 0.3 * 0.5 * 15 / 100 = 0.0225  OK
+    baseline:  0.1  > 0.3 * 0.5 * 15 / 100 = 0.0225  OK
 
 C2  Anti-hovering: max proximity reward (at distance 0) must not
     exceed the average hunger penalty per tick.
 
         w_prox < |w_hprop| / 2
 
-    forage:  0.1  < 0.3 / 2 = 0.15  OK
+    baseline:  0.1  < 0.3 / 2 = 0.15  OK
 
 C3  Anti-passivity: the total tick reward over a passive episode
     must not exceed the accumulated penalties.
@@ -53,30 +53,28 @@ C3  Anti-passivity: the total tick reward over a passive episode
         w_tick < (|w_hprop| * Sigma_h + |w_sdm| * h_s * T_death + |w_death|)
                  / T_passive
 
-    where Sigma_h ~ 449.5 for stationary depletion over 700 ticks.
-
-    forage:  0.0  < (0.3 * 449.5 + 1.0 * 100 + 10) / 700 = 0.35  OK
+    baseline:  0.0  < (0.3 * 449.5 + 1.0 * 100 + 10) / 700 = 0.35  OK
 
 C4  Enemy flee: the damage penalty from one hit must exceed the
     hunger penalty from one evasive step.
 
         |w_edm| * d_e > |w_hprop| * c / u_max
 
-    forage:  0.1 * 15 = 1.5 > 0.3 * 0.5 / 100 = 0.0015  OK
+    baseline:  0.1 * 15 = 1.5 > 0.3 * 0.5 / 100 = 0.0015  OK
 
 C5  Starvation escalation: per-tick penalty when starving must
     exceed the max hunger-proportional penalty, creating urgency.
 
         |w_sdm| * h_s > |w_hprop|
 
-    forage:  1.0 * 0.5 = 0.5 > 0.3  OK
+    baseline:  1.0 * 0.5 = 0.5 > 0.3  OK
 
 C6  Terminal signal: the death penalty must be the worst single
     event, exceeding the best single event (eating).
 
         |w_death| > w_food
 
-    forage:  10 > 5  OK
+    baseline:  10 > 5  OK
 
 C7  Food trip: reaching food at expected distance d_bar must be
     worth the movement cost. Always satisfied when C1 holds and
@@ -93,106 +91,38 @@ from typing import Dict, Any
 
 from rl_thesis.config.config import WorldConfig, DQNConfig
 
-# Top-level keys are WorldConfig field overrides. An optional "_dqn" key
-# holds DQNConfig overrides for the experiment, keeping reward shaping,
-# world mechanics, and agent hyperparameters in one place per experiment.
-EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
-    # Feasible baseline: all constraints C1-C7 satisfied.
-    # Proximity rewards use the per-step closeness-change form.
-    "baseline": {},
 
-    # Original baseline with absolute proximity reward.
-    # Produces food hovering: the accumulated proximity stream
-    # (~36.6 over an episode) dominates the one-time food reward (+5).
+EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
+    # ------------------------------------------------------------------
+    # Main ablation matrix (reward shape x observation)
+    # Each reward row has a single-frame and a 4-frame variant.
+    # ------------------------------------------------------------------
+
+    # Baseline: default reward weights. Produces all three failure modes
+    # (oscillation, hovering, suicidal enemy-seeking) in a single run.
+    "baseline": {},
+    "baseline_fs": {
+        "frame_stack": 4,
+    },
+
+    # Absolute-closeness proximity (instead of per-step change form).
+    # Produces food hovering: the agent camps next to food without
+    # eating because the accumulated proximity stream dominates the
+    # one-time food reward.
     "absolute_proximity": {
         "proximity_delta": False,
     },
-
-    # Deliberate C1 violation (anti-stasis). Proximity below the
-    # movement break-even threshold: w_prox=0.02 < 0.0225.
-    # Predicted failure: agent learns to stay still because moving
-    # toward food costs more in hunger penalty than it gains in
-    # proximity reward.
-    "weak_proximity": {
-        "reward_food_visible_proximity": 0.02,
+    "absolute_proximity_fs": {
+        "proximity_delta": False,
+        "frame_stack": 4,
     },
 
-    # Diagnostic: baseline rewards with zero movement cost.
-    # If the agent still oscillates, oscillation is a training
-    # artifact, not a reward-rational strategy.
-    "free_movement": {
-        "movement_cost": 0.0,
-    },
-
-    # C6 violation (terminal signal). No death penalty.
-    # Tests whether per-step consequences alone (hunger, damage,
-    # starvation) are sufficient to learn survival, or whether
-    # the terminal signal is necessary for TD bootstrapping to
-    # propagate long-horizon danger.
-    "no_death": {
-        "reward_death": 0.0,
-    },
-
-    # Death-only: the sole reward signal is the terminal death
-    # penalty. All per-step shaping removed. Tests whether a
-    # single sparse signal can drive learning over a 1000-step
-    # horizon, or whether the credit assignment gap is too wide.
-    "death_only": {
-        "reward_food_eaten": 0.0,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_food_visible_proximity": 0.0,
-        "reward_shelter_safety": 0.0,
-    },
-
-    # Engineered: analytically designed to produce all three
-    # heuristic behaviors (flee, forage, shelter) as emergent
-    # Q-value optima.
-    #
-    # Key changes:
-    # 1. Remove hunger_proportional: eliminates the structural C1
-    #    incompatibility (PV of movement cost at gamma=0.99 exceeds
-    #    any feasible proximity reward by factor 22).
-    # 2. Enable low_hunger threshold penalty (-0.5 at <30% hunger):
-    #    creates urgency without the proportional-to-movement-cost
-    #    coupling. Flat penalty means movement doesn't amplify cost.
-    # 3. Stronger food reward (8.0) and proximity (0.15): compensate
-    #    for removed hunger gradient; PV of eating at distance 5 is
-    #    ~+22 from delayed threshold penalty alone.
-    # 4. Enemy proximity (closeness-change form): flee gradient before contact,
-    #    5x food proximity gradient. Only when not in shelter.
-    # 5. Stronger damage penalty: -7.5 per hit vs +8.0 per food.
-    "engineered": {
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": -0.5,
-        "reward_food_eaten": 8.0,
-        "reward_food_visible_proximity": 0.15,
-        "reward_enemy_damage_taken": -0.5,
-        "reward_enemy_proximity": -0.5,
-    },
-
-    # Engineered v4: symmetric proximity gradients.
-    #
-    # V1-V3 all plateau at ~620-680 survival because the agent never
-    # learns to navigate TO shelter when well-fed. The shelter_safety
-    # reward is binary (in/out), giving no gradient for approach.
-    #
-    # Fix: add shelter proximity (closeness-change form) that mirrors food proximity.
-    # When hungry (< 50%): food proximity active, shelter proximity off.
-    # When well-fed (>= 50%): shelter proximity active, food proximity off.
-    # This creates symmetric approach gradients for both behavioral modes.
-    #
-    # Also adds small survival_tick (0.05) to directly reward each tick
-    # alive, making conservation strategies Q-value positive.
-
-    # Engineered v5: minimal reward set.
-    #
-    # Only three proximity gradients + death. No food_eaten, no
-    # starvation_damage, no hunger penalties, no shelter_safety.
-    # The hypothesis: fewer signals reduce Q-network confusion.
-    # The three closeness-change proximity rewards directly encode the
-    # behavioral switch (hungry->food, well-fed->shelter, enemy->flee).
+    # Minimal (E5): three closeness-change proximity rewards gated on
+    # hunger, plus the terminal death penalty. Every other reward
+    # component is zeroed. Gating:
+    #   hungry   (u < 0.5): food proximity on,    shelter off
+    #   well-fed (u >= 0.5): shelter proximity on, food off
+    #   enemy proximity: always on.
     "engineered_v5": {
         "reward_food_eaten": 0.0,
         "reward_starvation_damage": 0.0,
@@ -207,18 +137,7 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         "reward_shelter_safety": 0.0,
         "reward_survival_tick": 0.0,
     },
-
-    # V5 with 4-frame stacking for temporal context.
-    #
-    # The agent sees a single snapshot and cannot observe movement
-    # direction, enemy approach/retreat, or its own trajectory.
-    # Stacking the last 4 spatial grids (12 channels instead of 3)
-    # gives the CNN access to motion patterns.
-    #
-    # Buffer reduced to 250K (stacked obs is 4x larger in memory).
-    # 5M steps with tuned hyperparameters as in v5_long.
     "engineered_v5_fs": {
-        "max_steps": 50_000,
         "reward_food_eaten": 0.0,
         "reward_starvation_damage": 0.0,
         "reward_hunger_proportional": 0.0,
@@ -231,322 +150,80 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         "reward_shelter_proximity": 0.15,
         "reward_shelter_safety": 0.0,
         "reward_survival_tick": 0.0,
-        "_dqn": {
-            "frame_stack": 4,
-            "total_timesteps": 5_000_000,
-            "epsilon_decay_steps": 1_000_000,
-            "buffer_size": 250_000,
-            "tau": 0.002,
-        },
+        "frame_stack": 4,
     },
 
-    # V5_fs + small food_eaten: backup experiment.
-    #
-    # Prior food_eaten experiments (2.0, 5.0) destabilized V5's flee
-    # behavior because the food reward competed with the enemy proximity
-    # gradient (-0.5). At 0.3, a successful foraging trip nets ~+0.35
-    # total (+0.05 proximity + 0.30 food eaten), while enemy proximity
-    # cost per approach step is ~0.033. Ratio preserves flee priority.
-    # epsilon_end=0.05 for policy-collapse prevention.
-    "engineered_v6_fs_food": {
-        "reward_food_eaten": 0.3,
+    # ------------------------------------------------------------------
+    # Diagnostic configs (each isolates one failure mode)
+    # Used for the Failure Modes section; not part of the main matrix.
+    # ------------------------------------------------------------------
+
+    # C1 violation: proximity below movement break-even. Predicts
+    # suicide-by-enemy: the agent cannot profitably move toward food,
+    # so the cheapest escape from the accumulating hunger penalty is
+    # to walk into an enemy and end the episode.
+    "weak_proximity": {
+        "reward_food_visible_proximity": 0.02,
+    },
+
+    # Zero movement cost. If the agent still oscillates, oscillation is
+    # a training-dynamics artifact rather than a reward-rational strategy.
+    "free_movement": {
+        "movement_cost": 0.0,
+    },
+
+    # C6 violation: no death penalty. Tests whether the per-step
+    # signals alone suffice to learn long-horizon survival.
+    "no_death": {
+        "reward_death": 0.0,
+    },
+
+    # Sparse: only the terminal death penalty is non-zero. Tests the
+    # credit-assignment limit of single-signal RL over a 1000-step
+    # episode horizon.
+    "death_only": {
+        "reward_food_eaten": 0.0,
+        "reward_enemy_damage_taken": 0.0,
         "reward_starvation_damage": 0.0,
         "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
-        "reward_food_visible_proximity": 0.15,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
+        "reward_food_visible_proximity": 0.0,
         "reward_shelter_safety": 0.0,
-        "reward_survival_tick": 0.0,
-        "_dqn": {
-            "frame_stack": 4,
-            "total_timesteps": 5_000_000,
-            "epsilon_decay_steps": 1_000_000,
-            "epsilon_end": 0.05,
-            "buffer_size": 250_000,
-            "tau": 0.002,
-        },
-    },
-
-    # V6_fs_food with constant LR to test plasticity hypothesis.
-    #
-    # V6_fs_food peaked at 860 survival (step 940K) then collapsed by
-    # 3.4M. The collapse correlates with OneCycle LR decay: by step 2M
-    # the LR has dropped to ~1e-5, too small to correct the replay buffer
-    # distribution shift as foraging transitions age out.
-    #
-    # Fix: constant LR at 1e-4 maintains plasticity throughout training.
-    # Shorter training (2M steps) captures the peak window without the
-    # harmful late-training phase. Epsilon decay over 500K gives more
-    # greedy data earlier to test whether the policy holds.
-    "engineered_v7_fs": {
-        "max_steps": 50_000,
-        "reward_food_eaten": 0.3,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
-        "reward_food_visible_proximity": 0.15,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
-        "reward_shelter_safety": 0.0,
-        "reward_survival_tick": 0.0,
-        "_dqn": {
-            "frame_stack": 4,
-            "total_timesteps": 2_000_000,
-            "epsilon_decay_steps": 500_000,
-            "epsilon_end": 0.05,
-            "buffer_size": 250_000,
-            "tau": 0.002,
-            "lr_schedule": "constant",
-        },
-    },
-
-    # V8_fs_cycle: V7_fs + cyclical epsilon.
-    #
-    # V7_fs peaks early then drifts because the greedy policy biases
-    # the replay buffer toward its own behavior. Cyclical epsilon
-    # resets exploration to 0.5 every 500K steps, refilling the buffer
-    # with diverse transitions and stress-testing the current policy.
-    "engineered_v8_fs_cycle": {
-        "max_steps": 50_000,
-        "reward_food_eaten": 0.3,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
-        "reward_food_visible_proximity": 0.15,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
-        "reward_shelter_safety": 0.0,
-        "reward_survival_tick": 0.0,
-        "_dqn": {
-            "frame_stack": 4,
-            "total_timesteps": 2_000_000,
-            "epsilon_decay_steps": 500_000,
-            "epsilon_end": 0.05,
-            "epsilon_cycle_steps": 500_000,
-            "epsilon_cycle_peak": 0.5,
-            "buffer_size": 250_000,
-            "tau": 0.002,
-            "lr_schedule": "constant",
-        },
-    },
-
-    # V8_fs_reset: V7_fs + periodic Dueling head resets (Nikishin 2022).
-    #
-    # Directly addresses primacy bias and plasticity loss by reinitializing
-    # the last FC layers every 500K steps while keeping the CNN encoder
-    # and replay buffer. The network re-fits from accumulated experience
-    # rather than drifting with buffer distribution shift.
-    "engineered_v8_fs_reset": {
-        "max_steps": 50_000,
-        "reward_food_eaten": 0.3,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
-        "reward_food_visible_proximity": 0.15,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
-        "reward_shelter_safety": 0.0,
-        "reward_survival_tick": 0.0,
-        "_dqn": {
-            "frame_stack": 4,
-            "total_timesteps": 2_000_000,
-            "epsilon_decay_steps": 500_000,
-            "epsilon_end": 0.05,
-            "buffer_size": 250_000,
-            "tau": 0.002,
-            "lr_schedule": "constant",
-            "head_reset_freq": 500_000,
-        },
-    },
-
-    # V8_fs_strong: V7_fs + stronger foraging signals.
-    #
-    # V7_fs peaks at 3.85 food/episode; heuristic baseline 1000-tick
-    # survival would require ~9. Doubling food signals (food_eaten 0.3->0.5,
-    # food_proximity 0.15->0.3) pushes foraging harder while keeping the
-    # enemy proximity ratio favorable for flee (enemy 0.5 vs food 0.5
-    # per trip: 1.0x ratio, was 3.3x in V7_fs). Risk: destabilization
-    # like V6 (food=5.0) but at 10x smaller magnitude.
-    "engineered_v8_fs_strong": {
-        "reward_food_eaten": 0.5,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
-        "reward_food_visible_proximity": 0.3,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
-        "reward_shelter_safety": 0.0,
-        "reward_survival_tick": 0.0,
-        "_dqn": {
-            "frame_stack": 4,
-            "total_timesteps": 2_000_000,
-            "epsilon_decay_steps": 500_000,
-            "epsilon_end": 0.05,
-            "buffer_size": 250_000,
-            "tau": 0.002,
-            "lr_schedule": "constant",
-        },
-    },
-
-    # V9_fs_strong_reset: stronger foraging signals (V8_fs_strong) + head resets.
-    # V8_fs_strong alone underperformed (2/3 seeds below heuristic), likely
-    # because the stronger signals amplified the collapse trajectory. Head
-    # resets may rescue the strong-signal regime by periodically restoring
-    # plasticity before the policy over-commits to foraging into danger.
-    "engineered_v9_fs_strong_reset": {
-        "max_steps": 50_000,
-        "reward_food_eaten": 0.5,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
-        "reward_food_visible_proximity": 0.3,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
-        "reward_shelter_safety": 0.0,
-        "reward_survival_tick": 0.0,
-        "_dqn": {
-            "frame_stack": 4,
-            "total_timesteps": 2_000_000,
-            "epsilon_decay_steps": 500_000,
-            "epsilon_end": 0.05,
-            "buffer_size": 250_000,
-            "tau": 0.002,
-            "lr_schedule": "constant",
-            "head_reset_freq": 500_000,
-        },
-    },
-
-    # V9_fs_strong_reset extended to 10M steps. Tests whether the
-    # best-performing config keeps improving past 2M when plasticity
-    # is actively preserved (constant LR) and actively restored
-    # (periodic head resets). Previous long runs (V5_fs at 5M,
-    # V6_fs_food at 5M) showed no late improvement, but they used
-    # OneCycle LR which decays to ~1e-5 by 2M, confounding "no late
-    # improvement" with "LR too low to update." This run controls
-    # for that.
-    "engineered_v9_fs_strong_reset_long": {
-        "max_steps": 50_000,
-        "reward_food_eaten": 0.5,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
-        "reward_food_visible_proximity": 0.3,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
-        "reward_shelter_safety": 0.0,
-        "reward_survival_tick": 0.0,
-        "_dqn": {
-            "frame_stack": 4,
-            "total_timesteps": 10_000_000,
-            "epsilon_decay_steps": 500_000,
-            "epsilon_end": 0.05,
-            "buffer_size": 250_000,
-            "tau": 0.002,
-            "lr_schedule": "constant",
-            "head_reset_freq": 500_000,
-        },
-    },
-
-    # V5 + moderate food_eaten reward (0.3).
-    #
-    # V5 shelter-camps because foraging is reward-invisible: the
-    # proximity deltas yield +0.05 per trip, 20-200x below TD noise.
-    # food_eaten at 2.0-5.0 overwhelmed the flee gradient (-0.5).
-    # At 0.3, a clean foraging trip nets +0.35 total, detectable
-    # above noise but still dominated locally by enemy proximity.
-    "engineered_v6": {
-        "reward_food_eaten": 0.3,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
-        "reward_food_visible_proximity": 0.15,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
-        "reward_shelter_safety": 0.0,
-        "reward_survival_tick": 0.0,
-        "_dqn": {
-            "total_timesteps": 5_000_000,
-            "epsilon_decay_steps": 1_000_000,
-            "buffer_size": 1_000_000,
-            "tau": 0.002,
-        },
-    },
-
-    "engineered_v4": {
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": -0.5,
-        "low_hunger_threshold": 0.5,
-        "reward_food_eaten": 8.0,
-        "reward_food_visible_proximity": 0.15,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": -0.5,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
-        "reward_shelter_safety": 0.2,
-        "reward_survival_tick": 0.05,
     },
 }
 
 
-def _split_overrides(config_name: str) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    """Split a config entry into WorldConfig overrides and DQNConfig overrides."""
+def _get_config(config_name: str) -> Dict[str, Any]:
     if config_name not in EXPERIMENT_CONFIGS:
         available = ", ".join(sorted(EXPERIMENT_CONFIGS))
         raise ValueError(f"Unknown experiment config '{config_name}'. Available: {available}")
-    raw = EXPERIMENT_CONFIGS[config_name]
-    dqn_overrides = raw.get("_dqn", {})
-    world_overrides = {k: v for k, v in raw.items() if k != "_dqn"}
-    return world_overrides, dqn_overrides
+    return EXPERIMENT_CONFIGS[config_name]
 
 
 def make_world_config(config_name: str, seed: int = 42) -> WorldConfig:
-    """Create a WorldConfig with the named experiment's world overrides applied."""
-    world_overrides, _ = _split_overrides(config_name)
+    """Create a WorldConfig with the named experiment's reward overrides applied."""
+    raw = _get_config(config_name)
+    world_overrides = {k: v for k, v in raw.items() if k != "frame_stack"}
     return replace(WorldConfig(initial_seed=seed), **world_overrides)
 
 
 def make_dqn_config(config_name: str, **cli_overrides: Any) -> DQNConfig:
-    """Create a DQNConfig with the named experiment's DQN overrides and CLI overrides.
+    """Create a DQNConfig using the named experiment's ``frame_stack`` and defaults.
 
-    CLI overrides take precedence over config-level ``_dqn`` overrides.
+    CLI overrides (``total_timesteps``, ``eval_episodes``) take precedence.
     """
-    _, dqn_overrides = _split_overrides(config_name)
-    merged = {**dqn_overrides, **cli_overrides}
-    return replace(DQNConfig(), **merged) if merged else DQNConfig()
+    raw = _get_config(config_name)
+    frame_stack = raw.get("frame_stack", 1)
+    return replace(DQNConfig(), frame_stack=frame_stack, **cli_overrides)
 
 
 def describe_config(config_name: str) -> Dict[str, Any]:
     """Return the explicit overrides defined for this config.
 
-    Shows only the fields this config actually changes from the defaults,
-    split into ``world`` (WorldConfig overrides) and ``dqn`` (DQNConfig
-    overrides). Unmodified fields follow the defaults in
-    :class:`WorldConfig` and :class:`DQNConfig`.
+    Shows only fields this config actually changes from the defaults,
+    split into ``world`` (WorldConfig overrides) and ``dqn``
+    (``frame_stack`` override, if any).
     """
-    world_overrides, dqn_overrides = _split_overrides(config_name)
-    return {"world": dict(world_overrides), "dqn": dict(dqn_overrides)}
+    raw = _get_config(config_name)
+    world = {k: v for k, v in raw.items() if k != "frame_stack"}
+    dqn = {"frame_stack": raw["frame_stack"]} if "frame_stack" in raw else {}
+    return {"world": world, "dqn": dqn}

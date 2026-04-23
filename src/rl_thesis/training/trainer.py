@@ -15,8 +15,6 @@ from tqdm import tqdm
 from rl_thesis.environment.gym_env import SurvivalEnv
 from rl_thesis.environment.frame_stack import FrameStackEnv
 from rl_thesis.agent.dqn import DQNAgent
-from rl_thesis.agent.human_heuristic import HumanHeuristicAgent
-from rl_thesis.config.config import HumanHeuristicConfig
 from rl_thesis.training.metrics import MetricsLogger
 
 if TYPE_CHECKING:
@@ -72,35 +70,6 @@ class Trainer:
         if dqn_config.frame_stack > 1:
             env = FrameStackEnv(env, dqn_config.frame_stack)
         return env
-
-    def load_demonstrations(self, num_episodes: int = 100, start_seed: int = 5000) -> int:
-        """Pre-fill the replay buffer with heuristic agent demonstrations.
-
-        Returns the number of transitions added.
-        """
-        demo_env = self._make_env(self.world_config, self.dqn_config)
-        heuristic = HumanHeuristicAgent(
-            hunger_threshold=HumanHeuristicConfig.hunger_threshold,
-            flee_radius=HumanHeuristicConfig.flee_radius,
-        )
-        total_transitions = 0
-
-        for ep in range(num_episodes):
-            state, _ = demo_env.reset(seed=start_seed + ep)
-            world = demo_env.get_world()
-
-            while True:
-                action = heuristic.select_action(world)
-                next_state, reward, terminated, truncated, info = demo_env.step(action)
-                self.agent.store_transition(state, action, reward, next_state, terminated)
-                total_transitions += 1
-                state = next_state
-                if terminated or truncated:
-                    if not terminated:
-                        self.agent.discard_pending()
-                    break
-
-        return total_transitions
 
     def train(
         self,
@@ -209,12 +178,6 @@ class Trainer:
             # Periodic checkpointing
             if step > 0 and step % self.dqn_config.checkpoint_freq == 0:
                 self._save_periodic_checkpoint(step)
-
-            # Periodic head reset (Nikishin 2022) to counter primacy bias
-            reset_freq = self.dqn_config.head_reset_freq
-            if reset_freq > 0 and step > 0 and step % reset_freq == 0:
-                self.agent.reset_head()
-                pbar.write(f"[step {step}] Reset Dueling head weights")
 
             if step > 0 and step % self.dqn_config.eval_freq == 0:
                 self.metrics.log_system(

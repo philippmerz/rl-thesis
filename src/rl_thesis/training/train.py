@@ -21,8 +21,7 @@ def _format_time(seconds: float) -> str:
 
 def run_single(config_name: str, seed: int, dqn_config: DQNConfig,
                checkpoint: str | None = None,
-               warm_start: str | None = None,
-               demo_episodes: int = 0) -> None:
+               warm_start: str | None = None) -> None:
     """Train a single (config, seed) combination.
 
     If *checkpoint* is provided, training resumes from that file.

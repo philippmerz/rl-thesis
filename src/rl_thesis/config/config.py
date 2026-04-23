@@ -130,48 +130,42 @@ class VisualizationConfig:
 class DQNConfig:
     checkpoint_dir: Path = Path("checkpoints")
     log_dir: Path = Path("logs")
-    
+
+    # Network architecture
     merge_hidden: int = 256
     head_hidden: int = 128
-    
     cnn_channels: Tuple[int, ...] = (32, 64, 64)
-    
+
     # Training hyperparameters
     learning_rate: float = 1e-4
     gamma: float = 0.99
     batch_size: int = 128
     weight_decay: float = 1e-4
-    n_step: int = 5                       # Multi-step returns horizon
-    frame_stack: int = 1                   # Stacked observation frames (1 = no stacking)
+    n_step: int = 3                       # Rainbow (Hessel 2018) multi-step returns horizon
+
+    # Observation
+    frame_stack: int = 1                  # Ablation variable: 1 = single frame, 4 = 4-frame stacking
 
     # Replay buffer
-    buffer_size: int = 500_000
-    min_buffer_size: int = 10_000         # Wait for samples before training
+    buffer_size: int = 250_000
+    min_buffer_size: int = 10_000
 
     # Target network (Polyak averaging per training step)
-    tau: float = 0.005
+    tau: float = 0.002
 
     # Exploration (epsilon-greedy)
     epsilon_start: float = 1.0
     epsilon_end: float = 0.01
     epsilon_decay_steps: int = 500_000
-    epsilon_cycle_steps: int = 0          # 0 = no cyclical reset; N = reset epsilon to epsilon_cycle_peak every N steps
-    epsilon_cycle_peak: float = 0.5       # Peak epsilon at each cycle reset
-
-    # Periodic head reset (Nikishin 2022)
-    head_reset_freq: int = 0              # 0 = disabled; N = reset Dueling head every N steps
 
     # Training duration
-    total_timesteps: int = 1_000_000
+    total_timesteps: int = 2_000_000
 
-    # Checkpointing
+    # Checkpointing / evaluation
     checkpoint_freq: int = 10_000
-    checkpoint_keep_stride: int = 10      # 10 keeps every 10th periodic checkpoint
+    checkpoint_keep_stride: int = 10
     eval_freq: int = 5_000
     eval_episodes: int = 10
-    
-    # Learning rate schedule
-    lr_schedule: str = "onecycle"  # "onecycle" or "constant"
 
-    # Device
-    device: str = "auto"  # "auto" picks cuda > mps > cpu; override with "cuda"/"mps"/"cpu"
+    # Device (auto picks cuda > mps > cpu)
+    device: str = "auto"

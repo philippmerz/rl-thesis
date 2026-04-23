@@ -95,25 +95,6 @@ class DQNAgent:
             eps=1e-5,
         )
 
-        
-        effective_training_steps = max(
-            self.config.total_timesteps - self.config.min_buffer_size + 1, 1
-        )
-        if self.config.lr_schedule == "constant":
-            self.lr_scheduler = optim.lr_scheduler.LambdaLR(
-                self.optimizer, lr_lambda=lambda _: 1.0,
-            )
-        else:
-            self.lr_scheduler = optim.lr_scheduler.OneCycleLR(
-                self.optimizer,
-                max_lr=self.config.learning_rate,
-                total_steps=effective_training_steps,
-                pct_start=0.05,
-                anneal_strategy='cos',
-                div_factor=10,
-                final_div_factor=10,
-            )
-        
         self.replay_buffer = NStepPrioritizedBuffer(
             capacity=self.config.buffer_size,
             obs_dim=observation_size,
@@ -160,16 +141,11 @@ class DQNAgent:
             Selected action index
         """
         if training:
-            # Decay epsilon; optionally reset to peak at each cycle boundary
             if self.steps_done > 0:
-                cycle = self.config.epsilon_cycle_steps
-                if cycle > 0 and self.steps_done % cycle == 0:
-                    self.epsilon = self.config.epsilon_cycle_peak
-                else:
-                    self.epsilon = max(
-                        self.config.epsilon_end,
-                        self.epsilon - self.epsilon_decay,
-                    )
+                self.epsilon = max(
+                    self.config.epsilon_end,
+                    self.epsilon - self.epsilon_decay,
+                )
             self.steps_done += 1
         
         # Epsilon-greedy action selection
@@ -199,39 +175,6 @@ class DQNAgent:
         """Drop uncommitted n-step transitions (call after forced env resets)."""
         self.replay_buffer.discard_pending()
 
-    def reset_head(self) -> None:
-        """Re-initialize the Dueling head weights, keeping CNN encoder + replay buffer.
-
-        Implements the last-layer reset from Nikishin et al. 2022 to counter primacy
-        bias and plasticity loss. Resets both policy and target networks' heads, plus
-        the corresponding optimizer state so the fresh weights aren't clobbered by
-        stale Adam moments.
-        """
-        from rl_thesis.agent.network import DuelingHead
-
-        head_params_before = list(self.policy_net.head.parameters())
-        feature_size = self.policy_net.encoder.output_size
-        head_hidden = self.config.head_hidden
-
-        new_head = DuelingHead(feature_size, self.action_size, hidden=head_hidden).to(self.device)
-        self.policy_net.head = new_head
-        self.target_net.head = DuelingHead(feature_size, self.action_size, hidden=head_hidden).to(self.device)
-        self.target_net.head.load_state_dict(self.policy_net.head.state_dict())
-        self.target_net.eval()
-
-        # Clear Adam moments for the old head parameters
-        for p in head_params_before:
-            if p in self.optimizer.state:
-                del self.optimizer.state[p]
-
-        # Rebuild optimizer param groups to point at the new head
-        new_decay = [p for n, p in self.policy_net.named_parameters()
-                     if p.requires_grad and "bias" not in n and "norm" not in n.lower()]
-        new_no_decay = [p for n, p in self.policy_net.named_parameters()
-                        if p.requires_grad and ("bias" in n or "norm" in n.lower())]
-        self.optimizer.param_groups[0]['params'] = new_decay
-        self.optimizer.param_groups[1]['params'] = new_no_decay
-    
     def train_step(self) -> Optional[float]:
         """
         Returns:
@@ -243,12 +186,7 @@ class DQNAgent:
         loss = self._train_step_prioritized()
 
         self.updates_done += 1
-        
-        # Step the learning rate scheduler (guard against overshoot for OneCycleLR)
-        total = getattr(self.lr_scheduler, 'total_steps', None)
-        if total is None or self.lr_scheduler._step_count <= total:
-            self.lr_scheduler.step()
-        
+
         self._soft_update_target()
 
         return loss
@@ -344,7 +282,6 @@ class DQNAgent:
             'policy_net': self.policy_net.state_dict(),
             'target_net': self.target_net.state_dict(),
             'optimizer': self.optimizer.state_dict(),
-            'lr_scheduler': self.lr_scheduler.state_dict(),
             'steps_done': self.steps_done,
             'updates_done': self.updates_done,
             'epsilon': self.epsilon,
@@ -403,10 +340,6 @@ class DQNAgent:
         self.policy_net.load_state_dict(checkpoint['policy_net'])
         self.target_net.load_state_dict(checkpoint['target_net'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
-
-        # Load scheduler if present (for backward compatibility)
-        if 'lr_scheduler' in checkpoint:
-            self.lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
 
         self.steps_done = checkpoint['steps_done']
         self.updates_done = checkpoint['updates_done']
