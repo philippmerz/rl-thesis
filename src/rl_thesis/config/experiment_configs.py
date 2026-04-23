@@ -98,7 +98,7 @@ from rl_thesis.config.config import WorldConfig, DQNConfig
 # world mechanics, and agent hyperparameters in one place per experiment.
 EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
     # Feasible baseline: all constraints C1-C7 satisfied.
-    # Uses delta-based (PBRS) proximity reward.
+    # Proximity rewards use the per-step closeness-change form.
     "baseline": {},
 
     # Original baseline with absolute proximity reward.
@@ -160,7 +160,7 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
     # 3. Stronger food reward (8.0) and proximity (0.15): compensate
     #    for removed hunger gradient; PV of eating at distance 5 is
     #    ~+22 from delayed threshold penalty alone.
-    # 4. Enemy proximity (PBRS delta): flee gradient before contact,
+    # 4. Enemy proximity (closeness-change form): flee gradient before contact,
     #    5x food proximity gradient. Only when not in shelter.
     # 5. Stronger damage penalty: -7.5 per hit vs +8.0 per food.
     "engineered": {
@@ -178,7 +178,7 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
     # learns to navigate TO shelter when well-fed. The shelter_safety
     # reward is binary (in/out), giving no gradient for approach.
     #
-    # Fix: add shelter proximity (PBRS delta) that mirrors food proximity.
+    # Fix: add shelter proximity (closeness-change form) that mirrors food proximity.
     # When hungry (< 50%): food proximity active, shelter proximity off.
     # When well-fed (>= 50%): shelter proximity active, food proximity off.
     # This creates symmetric approach gradients for both behavioral modes.
@@ -191,8 +191,8 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
     # Only three proximity gradients + death. No food_eaten, no
     # starvation_damage, no hunger penalties, no shelter_safety.
     # The hypothesis: fewer signals reduce Q-network confusion.
-    # The three PBRS delta proximities directly encode the behavioral
-    # switch (hungry->food, well-fed->shelter, enemy->flee).
+    # The three closeness-change proximity rewards directly encode the
+    # behavioral switch (hungry->food, well-fed->shelter, enemy->flee).
     "engineered_v5": {
         "reward_food_eaten": 0.0,
         "reward_starvation_damage": 0.0,

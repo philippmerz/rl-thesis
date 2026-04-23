@@ -33,7 +33,7 @@ We investigate what it takes to make a DQN agent consistently outperform a scrip
 
 Reinforcement learning (RL) has produced agents that match or exceed human performance on complex tasks, from Atari games \citep{Mnih2015} to board games and robotic control. These results typically require large-scale compute and highly-tuned setups. A less studied but practically central question is what to do when an RL agent fails to learn an adequate policy: which part of the pipeline is the bottleneck, and what principled intervention addresses it?
 
-Reward design is the usual first suspect. Potential-based reward shaping (PBRS) \citep{Ng1999} can accelerate learning under a sparse objective by adding a dense shaping reward derived from a state potential $\Phi(s)$, with the guarantee that the optimal policy is preserved. In practice, however, PBRS sees limited use: its guarantee breaks down under function approximation, designing $\Phi(s)$ requires knowing which states represent progress, difficult in open-ended survival tasks without clear goal states, and the framework restricts all shaping to a single scalar function of state, while practitioners often need event-driven signals that are more naturally expressed as weighted reward components.
+Reward design is the usual first suspect: a mis-weighted reward function is often the proximate cause of failure in applied RL, and can produce well-known failure modes such as hovering near a target, oscillation, or policy collapse. The standard theoretical framework for reward shaping is potential-based reward shaping (PBRS, \citet{Ng1999}), which guarantees that adding a shaping term derived from a state potential $\Phi(s)$ leaves the optimal policy unchanged. PBRS fits tasks with a clear goal state from which $\Phi$ can be derived; it fits multi-objective survival tasks less well, because the objective is a mix of competing event-driven signals whose relative weighting is itself the design decision. We therefore use a weighted-sum reward function below, without invoking the PBRS guarantee.
 
 In multi-objective settings, practitioners typically want to \emph{steer} behavior toward a specific balance of competing goals, for instance favoring aggressive foraging over cautious shelter use, or vice versa. This means deliberately defining reward functions that encode different objectives, not preserving a single one. The resulting reward functions combine multiple weighted components whose relative magnitudes directly determine what the agent optimizes. Small changes in these weights can produce qualitatively different behaviors, and there is no single ``correct'' weighting; the choice reflects a design decision about what behavior is desirable.
 
@@ -222,11 +222,11 @@ r_t ={}& w_\text{food}\, i_t^{(\text{eat})}
 \end{equation}
 where $w_{\cdot} \in \mathbb{R}$ are tunable scalar weights; $i_t^{(\text{eat})}, i_t^{(\text{die})}, i_t^{(\text{low})}, i_t^{(\text{safe})} \in \{0,1\}$ are binary indicators for food eaten, death, low hunger, and shelter safety; $d_t^{(\text{e})}$ and $d_t^{(\text{s})}$ are enemy damage and starvation damage; and $u_t \in [0, 1]$ is the hunger ratio.
 
-The three proximity terms use potential-based reward shaping (PBRS) in delta form. For target type $x \in \{\text{f}, \text{e}, \text{s}\}$ (food, enemy, shelter), define the closeness potential
+The three proximity terms reward per-step changes in closeness to a target, rather than absolute closeness. For target type $x \in \{\text{f}, \text{e}, \text{s}\}$ (food, enemy, shelter), define the closeness score
 \begin{equation}
 \phi_t^{(x)} = \frac{d_\text{max} - d_t^{(x)} + 1}{d_\text{max} + 1} \in [0, 1],
 \end{equation}
-where $d_t^{(x)}$ is the Manhattan distance to the nearest visible entity of type $x$ and $d_\text{max} = 2r_\text{obs}$. If no entity is visible, $\phi_t^{(x)} = 0$. The delta reward $\Delta\phi_t^{(x)} = \phi_t^{(x)} - \phi_{t-1}^{(x)}$ is positive when the agent moves closer and negative when it moves away, satisfying the PBRS form of \citet{Ng1999}. Unlike absolute proximity, delta proximity does not reward hovering near a target.
+where $d_t^{(x)}$ is the Manhattan distance to the nearest visible entity of type $x$ and $d_\text{max} = 2r_\text{obs}$. If no entity is visible, $\phi_t^{(x)} = 0$. The per-step closeness change $\Delta\phi_t^{(x)} = \phi_t^{(x)} - \phi_{t-1}^{(x)}$ is positive when the agent moved closer to the target in that step and negative when it moved away. We reward this per-step change rather than the absolute closeness because rewarding absolute closeness would also reward standing still next to a target (for example, hovering next to a food tile without eating it). The per-step change form gives zero reward for staying in place, so it only pays the agent for active motion toward the target.
 
 Two proximity terms can be conditionally gated on the hunger ratio. When conditional gating is enabled, the food proximity fires only when $u_t < u_\text{thresh}$ (hungry) and the shelter proximity fires only when $u_t \geq u_\text{thresh}$ (well-fed). This encodes a behavioral mode switch through the reward function: the agent receives a spatial gradient toward food when it needs to eat and toward shelter when it does not.
 
@@ -247,9 +247,9 @@ Starvation damage ($w_\text{sdm}$)    & Per unit of starvation damage         & 
 Death ($w_\text{death}$)              & Health reaches zero                   & $-10.0$ \\
 Low hunger ($w_\text{hunger}$)        & Per tick when $u_t < u_\text{thresh}$ & disabled \\
 Hunger proportional ($w_\text{hprop}$) & Continuous, scales with $(1 - u_t)$  & $-0.3$ \\
-Food proximity ($w_\text{fprox}$)     & PBRS delta toward nearest food        & $+0.1$ \\
-Enemy proximity ($w_\text{eprox}$)    & PBRS delta toward nearest enemy       & disabled \\
-Shelter proximity ($w_\text{sprox}$)  & PBRS delta toward nearest shelter     & disabled \\
+Food proximity ($w_\text{fprox}$)     & Change in closeness to nearest food this step    & $+0.1$ \\
+Enemy proximity ($w_\text{eprox}$)    & Change in closeness to nearest enemy this step   & disabled \\
+Shelter proximity ($w_\text{sprox}$)  & Change in closeness to nearest shelter this step & disabled \\
 Shelter safety ($w_\text{shelter}$)   & Agent in shelter                      & $+0.1$ \\
 Survival tick ($w_\text{tick}$)       & Per step alive                        & disabled \\
 \bottomrule
@@ -452,7 +452,7 @@ The baseline reward includes a continuous hunger-proportional penalty $w_\text{h
 while the maximum food proximity reward from one step is approximately $0.1 / 15 \approx 0.0067$. The movement penalty exceeds the approach reward by a factor of 22. Not moving is Q-value optimal regardless of hunger level. No proximity gradient can overcome this stasis equilibrium. Removing $w_\text{hprop}$ is a prerequisite for any proximity-based design.
 
 \paragraph{Conditional proximity gating.}
-With the hunger-proportional penalty removed, the reward function can encode the three behavioral modes (forage, shelter, flee) through conditional PBRS delta proximity signals. The food proximity gradient ($w_\text{fprox} = 0.15$) activates only when the hunger ratio falls below 0.5. The shelter proximity gradient ($w_\text{sprox} = 0.15$) activates only above this threshold. The enemy proximity gradient ($w_\text{eprox} = -0.5$) is always active. This gating mirrors the heuristic's conditional logic through the reward function: the agent receives a spatial gradient toward food when it needs to eat and toward shelter when it does not.
+With the hunger-proportional penalty removed, the reward function can encode the three behavioral modes (forage, shelter, flee) through conditionally-gated closeness-change signals. The food proximity gradient ($w_\text{fprox} = 0.15$) activates only when the hunger ratio falls below 0.5. The shelter proximity gradient ($w_\text{sprox} = 0.15$) activates only above this threshold. The enemy proximity gradient ($w_\text{eprox} = -0.5$) is always active. This gating mirrors the heuristic's conditional logic through the reward function: the agent receives a spatial gradient toward food when it needs to eat and toward shelter when it does not.
 
 \paragraph{The minimal reward set.}
 We tested configurations with varying numbers of reward components. Configurations combining proximity gradients with event-driven rewards (food eaten, damage taken), threshold penalties (low hunger), and binary signals (shelter safety, survival tick) consistently underperformed a minimal configuration using only the three conditional proximity gradients and the death penalty. All other weights are set to zero. Table~\ref{tab:minimal_config} lists the complete weight vector.
@@ -466,9 +466,9 @@ We tested configurations with varying numbers of reward components. Configuratio
 \toprule
 Component & Condition & Weight \\
 \midrule
-Food proximity ($w_\text{fprox}$)    & PBRS delta, only when $u_t < 0.5$  & $+0.15$ \\
-Shelter proximity ($w_\text{sprox}$) & PBRS delta, only when $u_t \geq 0.5$ & $+0.15$ \\
-Enemy proximity ($w_\text{eprox}$)   & PBRS delta, always                   & $-0.50$ \\
+Food proximity ($w_\text{fprox}$)    & Closeness change, active only when $u_t < 0.5$   & $+0.15$ \\
+Shelter proximity ($w_\text{sprox}$) & Closeness change, active only when $u_t \geq 0.5$ & $+0.15$ \\
+Enemy proximity ($w_\text{eprox}$)   & Closeness change, always active                   & $-0.50$ \\
 Death ($w_\text{death}$)             & Terminal                              & $-10.0$ \\
 \bottomrule
 \end{tabular}
@@ -585,8 +585,8 @@ E5 with four reward components outperforms E4 with nine (706 vs 695 mean surviva
 \paragraph{Reward scaling does not resolve the foraging gap.}
 Adding a food reward to E5 at magnitudes from $0.3$ to $5.0$ either degrades enemy avoidance (high values) or fails to improve survival (low values). Extended training ($5$M steps) also does not help: all seeds peak early and decline.
 
-\paragraph{Temporal context is a hard constraint for delta-based rewards.}
-PBRS delta proximity rewards depend on position changes, but the single-frame observation cannot distinguish motion from stasis. Frame stacking provides the missing information and lifts performance above the heuristic without changing the reward at all.
+\paragraph{Frame stacking unlocks performance above the heuristic.}
+The environment contains enemies that move autonomously from step to step; the optimal flee policy depends on where each enemy will be next, which depends on enemy velocity. A single-frame observation shows enemy positions but not velocities, so the agent cannot distinguish an enemy approaching from an enemy retreating. Stacking the last four frames gives the CNN access to inter-frame position changes from which it can infer velocity. This single change to the observation, with no change to the reward, lifts best-seed mean survival from $706$ to $830$ ticks.
 
 \paragraph{Policy collapse is a training-dynamics problem, not a reward problem.}
 The collapse occurs with the same reward function that produced the peak. Fixing it requires either preserving plasticity (constant LR), actively refreshing it (head resets), or preventing the buffer bias that drives it (cyclical $\varepsilon$).
@@ -606,8 +606,8 @@ The only modification that produces foraging behavior competitive with the heuri
 \paragraph{The agent extends survival but is not unbounded.}
 With the $50{,}000$-tick safety cap, every seed of the best configuration has a $100\%$ death rate; no episode approaches the cap; the longest single episode observed across all three seeds is $2477$ ticks (seed 43). The best-seed agent's median episode is $924$ ticks (seed 42), roughly $22\%$ longer than the heuristic's $754$. The agent does not achieve indefinite survival within the tested training budget.
 
-\paragraph{Delta proximity does not cause hovering.}
-Absolute proximity would reward the agent for being near food, creating the hovering failure mode (Section~\ref{sec:failure_modes}). Delta proximity rewards only the change in distance. All engineered configurations use delta proximity, and none exhibit hovering.
+\paragraph{Rewarding closeness change, not absolute closeness, prevents hovering.}
+Rewarding absolute closeness would pay the agent for being near food (including standing still next to it), producing the hovering failure mode (Section~\ref{sec:failure_modes}). Rewarding only the per-step change in closeness gives zero reward for staying in place, so the agent is only paid for active motion toward the target. All engineered configurations use the closeness-change form, and none exhibit hovering.
 
 % =============================================================================
 \section{Discussion}
@@ -618,7 +618,7 @@ Absolute proximity would reward the agent for being near food, creating the hove
 The design heuristics H1--H4 formalize per-step reward dynamics as inequalities over the weight vector. Satisfying all heuristics is necessary but not sufficient: the baseline satisfies all four yet fails due to the structural incompatibility between hunger-proportional penalty and movement cost. The progression from E4 to E5 shows that removing harmful signals can be more effective than adding informative ones. The heuristics rule out two specific degenerate policies (hovering, suicide) but do not guarantee the intended behavior.
 
 \paragraph{The perceptual bottleneck.}
-The reward-shaping search converged on a configuration that was coherent, PBRS-compliant, and analytically defensible --- yet still produced an agent that consistently under-forages. Frame stacking, a single well-known observation-level change \citep{Mnih2015}, unlocked the policy the reward had been aiming for. This is consistent with the recent framing that optimization rather than exploration is often the binding constraint in DeepRL \citep{Tarbouriech2025}: the reward signal was adequate, but the agent could not exploit it without temporal context. A reviewer or practitioner encountering a saturating reward-shaping campaign should check the observation before concluding that the reward is misspecified.
+The reward-shaping search converged on a configuration that was coherent and analytically defensible --- yet still produced an agent that consistently under-forages. Frame stacking, a single well-known observation-level change \citep{Mnih2015}, unlocked the policy the reward had been aiming for. This is consistent with the recent framing that optimization rather than exploration is often the binding constraint in DeepRL \citep{Tarbouriech2025}: the reward signal was adequate, but the agent could not exploit it without temporal context. A reviewer or practitioner encountering a saturating reward-shaping campaign should check the observation before concluding that the reward is misspecified.
 
 \paragraph{The training-dynamics bottleneck.}
 The collapse pattern in Figure~\ref{fig:collapse} matches descriptions of \emph{primacy bias} \citep{Nikishin2022} and \emph{plasticity loss} \citep{Dohare2024, Abbas2023}: as training progresses, the network loses the ability to incorporate new evidence, even when that evidence is present in the buffer. In our setup this manifests as a self-reinforcing loop between the $\varepsilon$-greedy exploration schedule and the OneCycle learning rate schedule. When both decay together, the replay buffer fills with transitions from the committed policy and the network no longer has the effective LR to correct. Each of our three dynamics interventions attacks a different point in this loop: constant LR preserves plasticity, cyclical $\varepsilon$ refills the buffer, and periodic head resets actively de-commit the value function. All three help; head resets help most.

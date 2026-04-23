@@ -18,7 +18,7 @@ Chronological record of all reward shaping and architecture experiments. Each en
 ### `absolute_proximity`
 - `proximity_delta: False` (use raw closeness instead of delta)
 - Produced persistent food hovering: agent camps next to food without eating. The accumulated proximity stream (~36/episode at +0.1) dominated the one-time +5 food reward
-- Takeaway: PBRS delta form eliminates hovering incentive
+- Takeaway: closeness-change form eliminates hovering incentive (vs absolute closeness)
 
 ### `weak_proximity`
 - `food_proximity=0.02` (violates H1: 0.02 < 0.0225 break-even)
@@ -61,7 +61,7 @@ Chronological record of all reward shaping and architecture experiments. Each en
 - Over-forages: eats 2x heuristic but takes full damage (no shelter behavior)
 
 ### `engineered_v5` (E5, 4 components) — STRONG BASELINE
-- Minimal set: 3 PBRS delta proximities (food when hungry, shelter when well-fed, enemy always) + death penalty. All event-driven and threshold rewards zeroed.
+- Minimal set: 3 closeness-change proximities (food when hungry, shelter when well-fed, enemy always) + death penalty. All event-driven and threshold rewards zeroed.
 - Benchmark: 706 survival, 0.58 food, 10.4 damage, 100% death
 - Episode-level: 50% of episodes eat 0 food (654 survival), 50% eat 1+ food (767 survival, matches heuristic)
 - Peak eval: 766.9 survival at step 1.56M (seed 42)
