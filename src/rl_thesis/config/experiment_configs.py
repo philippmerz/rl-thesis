@@ -1,88 +1,20 @@
-"""Named experiment configurations.
+"""Named experiment configurations for the Option A ablation.
 
 Each entry defines one reproducible experiment. A config dict contains
-WorldConfig reward-field overrides (``reward_*``, ``proximity_delta``,
-``movement_cost``, etc.) plus an optional top-level ``frame_stack``
-entry that overrides :class:`DQNConfig.frame_stack`.
+:class:`WorldConfig` reward-field overrides (``reward_*``,
+``proximity_delta``, ``movement_cost``, etc.) plus an optional top-level
+``frame_stack`` entry that overrides :class:`DQNConfig.frame_stack`.
 
 Nothing else is overridable from a config. All other training
 hyperparameters (learning rate, buffer size, tau, epsilon schedule,
 n-step horizon, total timesteps) are fixed at the :class:`DQNConfig`
-defaults across every experiment so that the ablation has a single
-axis of variation in DQN space (``frame_stack``) and an axis of
-variation in reward space.
+defaults across every experiment. The ablation has a single axis of
+variation in observation space (``frame_stack`` in {1, 4}) crossed
+with a reward-shape axis defined by the three reward configurations
+(``baseline``, ``absolute_proximity``, ``engineered_v5``).
 
-Reward feasibility constraints
-==============================
-
-Environment constants (from WorldConfig defaults):
-    u_max = 100       max hunger
-    h_max = 100       max health
-    c     = 0.5       movement hunger cost
-    u_dot = 0.2       hunger depletion per tick
-    h_s   = 0.5       starvation damage per tick
-    d_e   = 15        enemy damage per hit
-    f     = 20        food nutrition value
-    D     = 14        max visible distance (2 * obs_radius)
-
-Derived:
-    T_starve_still = u_max / u_dot                  = 500 ticks
-    T_starve_move  = u_max / (u_dot + c)            ~ 143 ticks
-    T_death        = h_max / h_s                     = 200 ticks
-    T_passive      = T_starve_still + T_death        = 700 ticks
-
-Notation: |w| denotes absolute value of a (negative) weight.
-
-C1  Anti-stasis: one step toward food must yield more proximity
-    reward than the hunger penalty from the movement cost.
-
-        w_prox > |w_hprop| * c * (D + 1) / u_max
-
-    baseline:  0.1  > 0.3 * 0.5 * 15 / 100 = 0.0225  OK
-
-C2  Anti-hovering: max proximity reward (at distance 0) must not
-    exceed the average hunger penalty per tick.
-
-        w_prox < |w_hprop| / 2
-
-    baseline:  0.1  < 0.3 / 2 = 0.15  OK
-
-C3  Anti-passivity: the total tick reward over a passive episode
-    must not exceed the accumulated penalties.
-
-        w_tick < (|w_hprop| * Sigma_h + |w_sdm| * h_s * T_death + |w_death|)
-                 / T_passive
-
-    baseline:  0.0  < (0.3 * 449.5 + 1.0 * 100 + 10) / 700 = 0.35  OK
-
-C4  Enemy flee: the damage penalty from one hit must exceed the
-    hunger penalty from one evasive step.
-
-        |w_edm| * d_e > |w_hprop| * c / u_max
-
-    baseline:  0.1 * 15 = 1.5 > 0.3 * 0.5 / 100 = 0.0015  OK
-
-C5  Starvation escalation: per-tick penalty when starving must
-    exceed the max hunger-proportional penalty, creating urgency.
-
-        |w_sdm| * h_s > |w_hprop|
-
-    baseline:  1.0 * 0.5 = 0.5 > 0.3  OK
-
-C6  Terminal signal: the death penalty must be the worst single
-    event, exceeding the best single event (eating).
-
-        |w_death| > w_food
-
-    baseline:  10 > 5  OK
-
-C7  Food trip: reaching food at expected distance d_bar must be
-    worth the movement cost. Always satisfied when C1 holds and
-    food restores more hunger than the trip costs:
-
-        f > d_bar * c
-
-    With ~36 food on 64x64, d_bar ~ 5:  20 > 5 * 0.5 = 2.5  OK
+The reward-design heuristics H1-H4 and the derivations behind the
+configs below are given in the thesis (Section "Reward Configurations").
 """
 from __future__ import annotations
 
