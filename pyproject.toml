@@ -8,11 +8,11 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "numpy>=2.4.3",
-    "pygame>=2.6.1",
-    "torch>=2.11.0",
-    "tqdm>=4.67.3",
-    "typer>=0.24.1",
+    "numpy>=1.26",
+    "pygame>=2.5",
+    "torch>=2.4",
+    "tqdm>=4.66",
+    "typer>=0.12",
 ]
 
 [project.scripts]
