@@ -154,40 +154,18 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
     },
 
     # ------------------------------------------------------------------
-    # Diagnostic configs (each isolates one failure mode)
-    # Used for the Failure Modes section; not part of the main matrix.
+    # Illustrative diagnostic (single-seed qualitative demo, not part of
+    # the main ablation). Kept to show one heuristic violation has the
+    # empirical consequence derived analytically.
     # ------------------------------------------------------------------
 
-    # C1 violation: proximity below movement break-even. Predicts
-    # suicide-by-enemy: the agent cannot profitably move toward food,
-    # so the cheapest escape from the accumulating hunger penalty is
-    # to walk into an enemy and end the episode.
+    # H1 violation: food-proximity weight below the movement-cost
+    # break-even (0.02 < 0.0225). The analytical prediction is the
+    # suicide failure mode: the agent cannot profitably move toward
+    # food, so the cheapest escape from the accumulating hunger
+    # penalty is to walk into an enemy and end the episode.
     "weak_proximity": {
         "reward_food_visible_proximity": 0.02,
-    },
-
-    # Zero movement cost. If the agent still oscillates, oscillation is
-    # a training-dynamics artifact rather than a reward-rational strategy.
-    "free_movement": {
-        "movement_cost": 0.0,
-    },
-
-    # C6 violation: no death penalty. Tests whether the per-step
-    # signals alone suffice to learn long-horizon survival.
-    "no_death": {
-        "reward_death": 0.0,
-    },
-
-    # Sparse: only the terminal death penalty is non-zero. Tests the
-    # credit-assignment limit of single-signal RL over a 1000-step
-    # episode horizon.
-    "death_only": {
-        "reward_food_eaten": 0.0,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_food_visible_proximity": 0.0,
-        "reward_shelter_safety": 0.0,
     },
 }
 
