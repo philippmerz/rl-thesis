@@ -85,6 +85,28 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         "frame_stack": 4,
     },
 
+    # Episode-cap robustness check: identical to engineered_v5_fs but
+    # with the per-episode tick cap raised from 1,000 to 50,000 both
+    # during training and at benchmark. Used to verify that the
+    # parity-not-superiority verdict for the headline cell is not an
+    # artefact of training under truncation.
+    "engineered_v5_fs_cap50k": {
+        "max_steps": 50_000,
+        "reward_food_eaten": 0.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "low_hunger_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+        "frame_stack": 4,
+    },
+
     # ------------------------------------------------------------------
     # Illustrative diagnostic (single-seed qualitative demo, not part of
     # the main ablation). Kept to show one heuristic violation has the
