@@ -25,8 +25,8 @@ CELLS = [
     ("baseline_fs",           "Baseline",              "fs"),
     ("absolute_proximity",    "Absolute proximity",    "sf"),
     ("absolute_proximity_fs", "Absolute proximity",    "fs"),
-    ("engineered_v5",         "Engineered V5",         "sf"),
-    ("engineered_v5_fs",      "Engineered V5",         "fs"),
+    ("engineered_v5",         "Minimal",         "sf"),
+    ("engineered_v5_fs",      "Minimal",         "fs"),
 ]
 SEEDS = [42, 43, 44, 45]
 SMOOTH_WINDOW = 10
@@ -58,7 +58,7 @@ def make_figure() -> plt.Figure:
     rows = [
         ("baseline",              "baseline_fs",           "Baseline"),
         ("absolute_proximity",    "absolute_proximity_fs", "Absolute proximity"),
-        ("engineered_v5",         "engineered_v5_fs",      "Engineered V5"),
+        ("engineered_v5",         "engineered_v5_fs",      "Minimal"),
     ]
     for r, (sf_cfg, fs_cfg, label) in enumerate(rows):
         panel(axes[r, 0], sf_cfg, f"{label}, single-frame", PALETTE.sf)

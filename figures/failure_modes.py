@@ -38,8 +38,8 @@ CELLS = [
     ("baseline_fs",           "Baseline (fs)"),
     ("absolute_proximity",    "Abs. prox. (sf)"),
     ("absolute_proximity_fs", "Abs. prox. (fs)"),
-    ("engineered_v5",         "Engineered V5 (sf)"),
-    ("engineered_v5_fs",      "Engineered V5 (fs)"),
+    ("engineered_v5",         "Minimal (sf)"),
+    ("engineered_v5_fs",      "Minimal (fs)"),
 ]
 HEURISTIC_LABEL = "Heuristic"
 SEEDS = [42, 43, 44, 45]
