@@ -1,14 +1,18 @@
 # rl-thesis
 
-Reward shaping for multi-objective survival in grid-based deep reinforcement learning.
+Reward shape and frame stacking in DQN: a reward × observation ablation in multi-objective grid survival.
 
-A Rainbow-lite DQN agent learns to survive on a 64x64 grid by foraging food, avoiding enemies, and using shelters. The codebase studies how reward function design and observation context (frame stacking) affect learned behavior.
+A Rainbow-lite DQN agent learns to survive on a 64×64 grid by foraging food, avoiding enemies, and using shelters. The codebase studies how reward function design and observation context (frame stacking) interact, and supports a written bachelor's thesis. The full PDF is in `latex/original/thesis.pdf`.
 
 ## Install
 
+The project is managed with [`uv`](https://github.com/astral-sh/uv). From the repository root:
+
 ```
-pip install -e .
+uv sync
 ```
+
+`uv sync` reads `pyproject.toml` and `uv.lock` and produces a virtualenv at `.venv/`. Python `3.11` is pinned via `.python-version`. After this, prefix any command with `uv run`, or activate the venv directly with `source .venv/bin/activate`.
 
 ## Demo
 
@@ -16,13 +20,13 @@ Watch a trained agent or the scripted heuristic play in a pygame window.
 
 ```
 # Heuristic baseline (default)
-python -m rl_thesis.cli demo
+uv run python -m rl_thesis.cli demo
 
-# Trained DQN checkpoint (frame stacking auto-detected from checkpoint)
-python -m rl_thesis.cli demo --checkpoint runs/engineered_v5_fs/seed_42/checkpoints/model_best.pt
+# Trained DQN checkpoint (frame-stack size auto-detected from checkpoint)
+uv run python -m rl_thesis.cli demo --checkpoint runs/engineered_v5_fs_cap50k/seed_42/checkpoints/model_best.pt
 
 # Override frame stacking (useful when checkpoint config is missing or wrong)
-python -m rl_thesis.cli demo --checkpoint path/to/model.pt --frame-stack 4
+uv run python -m rl_thesis.cli demo --checkpoint path/to/model.pt --frame-stack 4
 ```
 
 Press ESC or close the window to exit. The demo runs 10 episodes.
@@ -30,10 +34,20 @@ Press ESC or close the window to exit. The demo runs 10 episodes.
 ## Train
 
 ```
-python -m rl_thesis.cli train --config engineered_v5 --seed 42
+uv run python -m rl_thesis.cli train --config engineered_v5_cap50k --seed 42
 ```
 
-Available configs live in `src/rl_thesis/config/experiment_configs.py`. `engineered_v5` is the minimal 4-component reward; `engineered_v5_fs` adds 4-frame stacking and 5M-step training.
+Available configs in `src/rl_thesis/config/experiment_configs.py`:
+
+| Config | Reward | Frame stack | Episode cap |
+|---|---|---|---|
+| `baseline` | default 11-component reward | 1 | 1,000 |
+| `baseline_fs` | same | 4 | 1,000 |
+| `absolute_proximity` | replaces Δφ with absolute φ | 1 | 1,000 |
+| `absolute_proximity_fs` | same | 4 | 1,000 |
+| `engineered_v5_cap50k` | minimal 4-component reward | 1 | 50,000 |
+| `engineered_v5_fs_cap50k` | same | 4 | 50,000 |
+| `weak_proximity` | baseline with `w_fprox = 0.02` (suicide-failure illustration) | 1 | 1,000 |
 
 CLI options:
 
@@ -49,10 +63,23 @@ CLI options:
 Evaluate a checkpoint against the heuristic baseline over 100 episodes.
 
 ```
-python -m rl_thesis.cli benchmark --checkpoint path/to/model.pt --config engineered_v5
+uv run python -m rl_thesis.cli benchmark --checkpoint path/to/model.pt --config engineered_v5_cap50k
 ```
 
-Reports mean survival, food eaten, damage taken, and death rate with a Welch t-test against the heuristic.
+Reports mean survival, food eaten, damage taken, and death rate, with a Welch's t-test against the heuristic.
+
+## Figures
+
+Thesis figures are regenerated from the per-episode CSVs in `vast_logs/per_episode/`.
+
+```
+uv run python -m figures.ablation_grid
+uv run python -m figures.failure_modes
+uv run python -m figures.learning_curves
+uv run python -m figures.observation_space
+```
+
+Each script writes its PDF to `latex/original/figures/`. To regenerate per-episode CSVs from trained checkpoints first, run `uv run python -m figures.dump_per_episode`.
 
 ## Project layout
 
@@ -61,4 +88,6 @@ Reports mean survival, food eaten, damage taken, and death rate with a Welch t-t
 - `src/rl_thesis/config/` world config, DQN config, named reward configurations
 - `src/rl_thesis/training/` trainer, benchmark, metrics logger
 - `src/rl_thesis/demo/` pygame visualization
-- `latex/` thesis source
+- `figures/` thesis figure scripts
+- `vast_logs/` per-episode benchmark CSVs and bench summary
+- `latex/original/` thesis LaTeX source (`thesis.tex`, `refs.bib`, figures)
