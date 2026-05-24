@@ -209,9 +209,6 @@ class DQNAgent:
         Returns:
             (current_q, target_q) — both shape (batch,).
         """
-        # should never be reached, but just to be sure
-        returns = torch.clamp(returns, -100.0, 100.0)
-
         current_q = self.policy_net(states).gather(
             1, actions.unsqueeze(1)
         ).squeeze(1)
@@ -221,7 +218,6 @@ class DQNAgent:
             next_q = self.target_net(next_states).gather(
                 1, next_actions.unsqueeze(1)
             ).squeeze(1)
-            next_q = torch.clamp(next_q, -1000.0, 1000.0)
             target_q = returns + (1 - dones) * gamma_ns * next_q
 
         return current_q, target_q

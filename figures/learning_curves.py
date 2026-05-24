@@ -25,12 +25,12 @@ CELLS = [
     ("baseline_fs",           "Baseline",              "fs"),
     ("absolute_proximity",    "Absolute proximity",    "sf"),
     ("absolute_proximity_fs", "Absolute proximity",    "fs"),
-    ("engineered_v5",         "Minimal",         "sf"),
-    ("engineered_v5_fs",      "Minimal",         "fs"),
+    ("engineered_v5_cap50k",  "Minimal",         "sf"),
+    ("engineered_v5_fs_cap50k","Minimal",        "fs"),
 ]
 SEEDS = [42, 43, 44, 45]
 SMOOTH_WINDOW = 10
-HEURISTIC_SURV = 768.4  # mean over both heuristic runs in bench_summary.csv
+HEURISTIC_SURV = 768.8  # mean over both heuristic runs in bench_summary.csv
 
 
 def panel(ax, cfg: str, title: str, color: str) -> None:
@@ -58,7 +58,7 @@ def make_figure() -> plt.Figure:
     rows = [
         ("baseline",              "baseline_fs",           "Baseline"),
         ("absolute_proximity",    "absolute_proximity_fs", "Absolute proximity"),
-        ("engineered_v5",         "engineered_v5_fs",      "Minimal"),
+        ("engineered_v5_cap50k",  "engineered_v5_fs_cap50k", "Minimal"),
     ]
     for r, (sf_cfg, fs_cfg, label) in enumerate(rows):
         panel(axes[r, 0], sf_cfg, f"{label}, single-frame", PALETTE.sf)

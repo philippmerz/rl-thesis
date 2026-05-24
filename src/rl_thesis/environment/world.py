@@ -305,7 +305,7 @@ class World:
                 closeness = 0.0
 
             hungry = (not self.config.proximity_only_when_hungry
-                      or self.agent.hunger_ratio < self.config.low_hunger_threshold)
+                      or self.agent.hunger_ratio < self.config.gating_threshold)
             if hungry:
                 if self.config.proximity_delta:
                     reward += self.config.reward_food_visible_proximity * (closeness - self._prev_closeness)
@@ -331,7 +331,7 @@ class World:
                 shelter_closeness = (max_visible_distance - nearest_shelter_distance + 1) / (max_visible_distance + 1)
             else:
                 shelter_closeness = 0.0
-            well_fed = self.agent.hunger_ratio >= self.config.low_hunger_threshold
+            well_fed = self.agent.hunger_ratio >= self.config.gating_threshold
             if well_fed:
                 reward += self.config.reward_shelter_proximity * (shelter_closeness - self._prev_shelter_closeness)
             self._prev_shelter_closeness = shelter_closeness

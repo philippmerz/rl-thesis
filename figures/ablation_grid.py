@@ -31,8 +31,8 @@ CELLS = [
     ("baseline_fs",           "Baseline",         "fs"),
     ("absolute_proximity",    "Abs. proximity",   "sf"),
     ("absolute_proximity_fs", "Abs. proximity",   "fs"),
-    ("engineered_v5",         "Minimal",          "sf"),
-    ("engineered_v5_fs",      "Minimal",          "fs"),
+    ("engineered_v5_cap50k",        "Minimal",          "sf"),
+    ("engineered_v5_fs_cap50k",     "Minimal",          "fs"),
 ]
 SF_COLOR = "#4477aa"
 FS_COLOR = "#ee6677"
@@ -119,12 +119,15 @@ def make_figure():
 
     # Panel 3: Frame-stacking effect (fs - sf) per reward
     ax = axes[2]
-    rewards = ["baseline", "absolute_proximity", "engineered_v5"]
+    rewards = ["baseline", "absolute_proximity", "engineered_v5_cap50k"]
     reward_labels = ["Baseline", "Abs. proximity", "Minimal"]
     deltas = []
     for r in rewards:
-        sf_mean = statistics.mean(float(x["d_surv"]) for x in grouped[r])
-        fs_mean = statistics.mean(float(x["d_surv"]) for x in grouped[r + "_fs"])
+        # Round cell means before subtracting so the displayed delta matches
+        # the rounded survival values in Table 3 (otherwise a 0.5-tick rounding
+        # gap can push the delta off by one).
+        sf_mean = round(statistics.mean(float(x["d_surv"]) for x in grouped[r]))
+        fs_mean = round(statistics.mean(float(x["d_surv"]) for x in grouped[r.replace("_cap50k", "_fs_cap50k") if "cap50k" in r else r + "_fs"]))
         deltas.append(fs_mean - sf_mean)
     bar_colors = ["#cc6677" if d < 0 else "#117733" for d in deltas]
     bars = ax.bar(np.arange(len(rewards)), deltas, color=bar_colors,

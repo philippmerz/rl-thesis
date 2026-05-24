@@ -51,7 +51,7 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
 
     # Minimal (E5): three closeness-change proximity rewards gated on
     # hunger, plus the terminal death penalty. Every other reward
-    # component is zeroed. Gating:
+    # component is zeroed.
     #   hungry   (u < 0.5): food proximity on,    shelter off
     #   well-fed (u >= 0.5): shelter proximity on, food off
     #   enemy proximity: always on.
@@ -60,7 +60,7 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         "reward_starvation_damage": 0.0,
         "reward_hunger_proportional": 0.0,
         "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
+        "proximity_gating_threshold": 0.5,
         "reward_food_visible_proximity": 0.15,
         "proximity_only_when_hungry": True,
         "reward_enemy_damage_taken": 0.0,
@@ -74,7 +74,7 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         "reward_starvation_damage": 0.0,
         "reward_hunger_proportional": 0.0,
         "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
+        "proximity_gating_threshold": 0.5,
         "reward_food_visible_proximity": 0.15,
         "proximity_only_when_hungry": True,
         "reward_enemy_damage_taken": 0.0,
@@ -85,18 +85,36 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         "frame_stack": 4,
     },
 
-    # Episode-cap robustness check: identical to engineered_v5_fs but
-    # with the per-episode tick cap raised from 1,000 to 50,000 both
-    # during training and at benchmark. Used to verify that the
-    # parity-not-superiority verdict for the headline cell is not an
-    # artefact of training under truncation.
+    # Headline minimal cells at cap=50000. We initially ran minimal at
+    # cap=1000 and observed that the agent reached the cap in a
+    # non-negligible fraction of episodes (the minimal reward is not
+    # intentionally misspecified, so the agent survives longer). The
+    # cap is therefore raised to 50000 for the minimal cells to remove
+    # right-censoring. The misspecified configurations (baseline,
+    # absolute_proximity) reached the cap in only a negligible fraction
+    # of episodes and are left at the original cap=1000.
+    "engineered_v5_cap50k": {
+        "max_steps": 50_000,
+        "reward_food_eaten": 0.0,
+        "reward_starvation_damage": 0.0,
+        "reward_hunger_proportional": 0.0,
+        "reward_low_hunger": 0.0,
+        "proximity_gating_threshold": 0.5,
+        "reward_food_visible_proximity": 0.15,
+        "proximity_only_when_hungry": True,
+        "reward_enemy_damage_taken": 0.0,
+        "reward_enemy_proximity": -0.5,
+        "reward_shelter_proximity": 0.15,
+        "reward_shelter_safety": 0.0,
+        "reward_survival_tick": 0.0,
+    },
     "engineered_v5_fs_cap50k": {
         "max_steps": 50_000,
         "reward_food_eaten": 0.0,
         "reward_starvation_damage": 0.0,
         "reward_hunger_proportional": 0.0,
         "reward_low_hunger": 0.0,
-        "low_hunger_threshold": 0.5,
+        "proximity_gating_threshold": 0.5,
         "reward_food_visible_proximity": 0.15,
         "proximity_only_when_hungry": True,
         "reward_enemy_damage_taken": 0.0,

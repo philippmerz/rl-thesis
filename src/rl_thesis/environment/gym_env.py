@@ -2,6 +2,7 @@
 Gym-style environment wrapper for the survival world.
 
 Follows standard step/reset API pattern.
+TODO: move RL specific logic out of World and into this wrapper
 """
 from __future__ import annotations
 

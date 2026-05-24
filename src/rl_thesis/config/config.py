@@ -1,6 +1,6 @@
 """Configuration module for the survival environment and DQN training."""
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
 from pathlib import Path
 
 
@@ -94,10 +94,23 @@ class WorldConfig:
     reward_hunger_proportional: float = -0.3
     reward_food_visible_proximity: float = 0.1
     proximity_only_when_hungry: bool = False
+    # Threshold on hunger_ratio used to gate the conditional proximity
+    # rewards. When set, food proximity fires for hunger_ratio < this
+    # value and shelter proximity fires for hunger_ratio >= this value.
+    # When None, falls back to low_hunger_threshold (preserves prior
+    # behaviour for configs that have not set this explicitly).
+    proximity_gating_threshold: Optional[float] = None
     reward_enemy_proximity: float = 0.0
     reward_shelter_proximity: float = 0.0
     reward_shelter_safety: float = 0.1
     proximity_delta: bool = True
+
+    @property
+    def gating_threshold(self) -> float:
+        """Resolved threshold used by the reward-gating logic."""
+        if self.proximity_gating_threshold is not None:
+            return self.proximity_gating_threshold
+        return self.low_hunger_threshold
 
 @dataclass
 class HumanHeuristicConfig:

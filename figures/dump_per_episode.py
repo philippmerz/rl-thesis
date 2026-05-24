@@ -6,7 +6,8 @@ to ``vast_logs/per_episode/<config>_seed_<seed>.csv``.
 
 Columns: episode, seed, survival, food_eaten, damage_taken,
 final_health, final_hunger, terminated, shelter_ticks,
-first_food_tick.
+first_food_tick, reward. ``reward`` is the undiscounted episode
+return under the cell's own reward configuration.
 
 The data feeds the failure-mode quantification figure and the
 learning-trajectory rationale: per-cell distributions are needed
@@ -45,7 +46,7 @@ OUT_DIR = REPO_ROOT / "vast_logs" / "per_episode"
 COLUMNS = [
     "episode", "seed", "survival", "food_eaten", "damage_taken",
     "final_health", "final_hunger", "terminated",
-    "shelter_ticks", "first_food_tick",
+    "shelter_ticks", "first_food_tick", "reward",
 ]
 
 
@@ -72,9 +73,11 @@ def rollout_heuristic(world_config: WorldConfig):
         first_food_tick = -1
         tick = 0
         ep_food = 0
+        ep_reward = 0.0
         while True:
             action = agent.select_action(world)
-            _, _, terminated, truncated, info = env.step(action)
+            _, reward, terminated, truncated, info = env.step(action)
+            ep_reward += reward
             tick += 1
             if world.agent.is_in_shelter:
                 shelter_ticks += 1
@@ -95,6 +98,7 @@ def rollout_heuristic(world_config: WorldConfig):
             int(bool(stats["terminated_by_death"])),
             shelter_ticks,
             first_food_tick,
+            round(float(ep_reward), 4),
         ])
     return rows
 
@@ -116,9 +120,11 @@ def rollout_dqn(checkpoint: str, world_config: WorldConfig):
         first_food_tick = -1
         tick = 0
         ep_food = 0
+        ep_reward = 0.0
         while True:
             action = agent.select_action(state, training=False)
-            state, _, terminated, truncated, info = env.step(action)
+            state, reward, terminated, truncated, info = env.step(action)
+            ep_reward += reward
             tick += 1
             if base_env.get_world().agent.is_in_shelter:
                 shelter_ticks += 1
@@ -139,6 +145,7 @@ def rollout_dqn(checkpoint: str, world_config: WorldConfig):
             int(bool(stats["terminated_by_death"])),
             shelter_ticks,
             first_food_tick,
+            round(float(ep_reward), 4),
         ])
     return rows
 
