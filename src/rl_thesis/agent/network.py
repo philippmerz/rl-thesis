@@ -94,6 +94,7 @@ class DuelingHead(nn.Module):
         )
         self.apply(_init_weights)
         # Scale output layers so initial Q-values start near zero
+        # TODO: replace with 0 init, orthogonal actually gives no advantage
         nn.init.orthogonal_(self.value_stream[-1].weight, gain=0.01)
         nn.init.orthogonal_(self.advantage_stream[-1].weight, gain=0.01)
 

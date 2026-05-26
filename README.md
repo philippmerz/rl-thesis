@@ -20,13 +20,13 @@ Watch a trained agent or the scripted heuristic play in a pygame window.
 
 ```
 # Heuristic baseline (default)
-uv run python -m rl_thesis.cli demo
+uv run rl-thesis demo
 
 # Trained DQN checkpoint (frame-stack size auto-detected from checkpoint)
-uv run python -m rl_thesis.cli demo --checkpoint runs/engineered_v5_fs_cap50k/seed_42/checkpoints/model_best.pt
+uv run rl-thesis demo --checkpoint runs/minimal_fs_cap50k/seed_42/checkpoints/model_best.pt
 
 # Override frame stacking (useful when checkpoint config is missing or wrong)
-uv run python -m rl_thesis.cli demo --checkpoint path/to/model.pt --frame-stack 4
+uv run rl-thesis demo --checkpoint path/to/model.pt --frame-stack 4
 ```
 
 Press ESC or close the window to exit. The demo runs 10 episodes.
@@ -34,7 +34,7 @@ Press ESC or close the window to exit. The demo runs 10 episodes.
 ## Train
 
 ```
-uv run python -m rl_thesis.cli train --config engineered_v5_cap50k --seed 42
+uv run rl-thesis train --config minimal_cap50k --seed 42
 ```
 
 Available configs in `src/rl_thesis/config/experiment_configs.py`:
@@ -45,8 +45,8 @@ Available configs in `src/rl_thesis/config/experiment_configs.py`:
 | `baseline_fs` | same | 4 | 1,000 |
 | `absolute_proximity` | replaces Δφ with absolute φ | 1 | 1,000 |
 | `absolute_proximity_fs` | same | 4 | 1,000 |
-| `engineered_v5_cap50k` | minimal 4-component reward | 1 | 50,000 |
-| `engineered_v5_fs_cap50k` | same | 4 | 50,000 |
+| `minimal_cap50k` | minimal 4-component reward | 1 | 50,000 |
+| `minimal_fs_cap50k` | same | 4 | 50,000 |
 | `weak_proximity` | baseline with `w_fprox = 0.02` (suicide-failure illustration) | 1 | 1,000 |
 
 CLI options:
@@ -63,10 +63,10 @@ CLI options:
 Evaluate a checkpoint against the heuristic baseline over 100 episodes.
 
 ```
-uv run python -m rl_thesis.cli benchmark --checkpoint path/to/model.pt --config engineered_v5_cap50k
+uv run rl-thesis benchmark --checkpoint path/to/model.pt --config minimal_cap50k
 ```
 
-Reports mean survival, food eaten, damage taken, and death rate, with a Welch's t-test against the heuristic.
+Reports mean survival, food eaten, damage taken, and death rate, with a paired t-test against the heuristic on matched seeds (DQN minus heuristic per world).
 
 ## Figures
 

@@ -36,8 +36,8 @@ CELLS = [
     ("baseline_fs", 42), ("baseline_fs", 43), ("baseline_fs", 44), ("baseline_fs", 45),
     ("absolute_proximity", 42), ("absolute_proximity", 43), ("absolute_proximity", 44), ("absolute_proximity", 45),
     ("absolute_proximity_fs", 42), ("absolute_proximity_fs", 43), ("absolute_proximity_fs", 44), ("absolute_proximity_fs", 45),
-    ("engineered_v5", 42), ("engineered_v5", 43), ("engineered_v5", 44), ("engineered_v5", 45),
-    ("engineered_v5_fs", 42), ("engineered_v5_fs", 43), ("engineered_v5_fs", 44), ("engineered_v5_fs", 45),
+    ("minimal_cap50k", 42), ("minimal_cap50k", 43), ("minimal_cap50k", 44), ("minimal_cap50k", 45),
+    ("minimal_fs_cap50k", 42), ("minimal_fs_cap50k", 43), ("minimal_fs_cap50k", 44), ("minimal_fs_cap50k", 45),
     ("weak_proximity", 42),
 ]
 NUM_EPISODES = 100

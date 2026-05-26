@@ -3,7 +3,7 @@
 Usage:
     python -m rl_thesis.training.benchmark                              # heuristic only
     python -m rl_thesis.training.benchmark --checkpoint path/to.pt      # DQN vs heuristic
-    python -m rl_thesis.training.benchmark --config engineered_v7_fs    # custom world config
+    python -m rl_thesis.training.benchmark --config minimal_fs_cap50k   # custom world config
 """
 from __future__ import annotations
 
@@ -143,36 +143,50 @@ def summarize(results: Dict[str, List[float]], label: str) -> Dict[str, float]:
 
 
 def compare(h_results: Dict[str, List[float]], d_results: Dict[str, List[float]]) -> None:
-    """Welch's t-test on survival times (pure numpy, no scipy)."""
+    """Paired t-test on per-world survival differences.
+
+    Both evaluations use matched seeds, so episode i is the same world for
+    both agents. The paired analysis honors that pairing and is strictly
+    more powerful than an unpaired test when world difficulty drives
+    correlated outcomes across the two agents. This matches the analysis
+    used for the thesis cell results.
+    """
     h_surv = np.array(h_results["survival"])
     d_surv = np.array(d_results["survival"])
 
-    n_h, n_d = len(h_surv), len(d_surv)
-    var_h = h_surv.var(ddof=1)
-    var_d = d_surv.var(ddof=1)
-    diff = d_surv.mean() - h_surv.mean()
+    if len(h_surv) != len(d_surv):
+        raise ValueError(
+            f"Paired test requires equal-length samples: got "
+            f"{len(h_surv)} heuristic, {len(d_surv)} DQN"
+        )
 
-    se = np.sqrt(var_d / n_d + var_h / n_h)
-    t_stat = diff / se if se > 0 else 0.0
+    diffs = d_surv - h_surv
+    n = len(diffs)
+    mean_diff = diffs.mean()
+    se = diffs.std(ddof=1) / np.sqrt(n)
+    t_stat = mean_diff / se if se > 0 else 0.0
+    df = n - 1
 
-    # Welch-Satterthwaite degrees of freedom
-    num = (var_d / n_d + var_h / n_h) ** 2
-    denom = (var_d / n_d) ** 2 / (n_d - 1) + (var_h / n_h) ** 2 / (n_h - 1)
-    df = num / denom if denom > 0 else 1.0
+    ci_half = 1.96 * se
+    ci_lo, ci_hi = mean_diff - ci_half, mean_diff + ci_half
 
-    # Two-tailed p-value approximation (normal for large df)
-    z = abs(t_stat)
+    # Two-tailed p-value via normal approximation; at n>=30 the t(n-1)
+    # distribution is indistinguishable from N(0,1) at the 5% threshold.
     import math
-    p_value = 2.0 * (1.0 - 0.5 * (1.0 + math.erf(z / math.sqrt(2.0))))
+    z = abs(t_stat)
+    # use stdlib so we don't need scipy just for this
+    cdf_z = 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+    p_value = 2.0 * (1.0 - cdf_z)
 
     print(f"\n{'=' * 50}")
-    print(f"  Comparison (DQN - Heuristic)")
+    print(f"  Comparison (DQN - Heuristic, paired)")
     print(f"{'=' * 50}")
-    print(f"  Survival diff: {diff:+.1f} ticks")
-    print(f"  Welch t-test:  t={t_stat:.2f}, df={df:.0f}, p~{p_value:.4f}")
-    if p_value < 0.05 and diff > 0:
+    print(f"  Per-world mean diff: {mean_diff:+.1f} ticks")
+    print(f"  95% CI:              [{ci_lo:+.1f}, {ci_hi:+.1f}]")
+    print(f"  Paired t-test:       t={t_stat:.2f}, df={df}, p~{p_value:.4f}")
+    if p_value < 0.05 and mean_diff > 0:
         print(f"  ** DQN significantly outperforms heuristic (p<0.05) **")
-    elif p_value < 0.05 and diff < 0:
+    elif p_value < 0.05 and mean_diff < 0:
         print(f"  Heuristic significantly outperforms DQN (p<0.05)")
     else:
         print(f"  No significant difference (p~{p_value:.4f})")
@@ -198,11 +212,9 @@ def main() -> None:
     print(f"Evaluating over {args.episodes} episodes (seeds {args.start_seed}-{args.start_seed + args.episodes - 1})")
 
     h_results = evaluate_heuristic(world_config, args.episodes, args.start_seed)
-    h_summary = summarize(h_results, "Heuristic Agent")
 
     if args.checkpoint:
         d_results = evaluate_dqn(args.checkpoint, world_config, args.episodes, args.start_seed)
-        d_summary = summarize(d_results, f"DQN ({args.checkpoint})")
         compare(h_results, d_results)
 
 

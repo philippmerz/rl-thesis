@@ -1,4 +1,4 @@
-"""Named experiment configurations for the Option A ablation.
+"""Named experiment configurations for the reward x observation ablation.
 
 Each entry defines one reproducible experiment. A config dict contains
 :class:`WorldConfig` reward-field overrides (``reward_*``,
@@ -11,10 +11,7 @@ n-step horizon, total timesteps) are fixed at the :class:`DQNConfig`
 defaults across every experiment. The ablation has a single axis of
 variation in observation space (``frame_stack`` in {1, 4}) crossed
 with a reward-shape axis defined by the three reward configurations
-(``baseline``, ``absolute_proximity``, ``engineered_v5``).
-
-The reward-design heuristics H1-H4 and the derivations behind the
-configs below are given in the thesis (Section "Reward Configurations").
+(``baseline``, ``absolute_proximity``, ``minimal``).
 """
 from __future__ import annotations
 
@@ -49,51 +46,18 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         "frame_stack": 4,
     },
 
-    # Minimal (E5): three closeness-change proximity rewards gated on
+    # Minimal: three closeness-change proximity rewards gated on
     # hunger, plus the terminal death penalty. Every other reward
     # component is zeroed.
     #   hungry   (u < 0.5): food proximity on,    shelter off
     #   well-fed (u >= 0.5): shelter proximity on, food off
     #   enemy proximity: always on.
-    "engineered_v5": {
-        "reward_food_eaten": 0.0,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": 0.0,
-        "proximity_gating_threshold": 0.5,
-        "reward_food_visible_proximity": 0.15,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
-        "reward_shelter_safety": 0.0,
-        "reward_survival_tick": 0.0,
-    },
-    "engineered_v5_fs": {
-        "reward_food_eaten": 0.0,
-        "reward_starvation_damage": 0.0,
-        "reward_hunger_proportional": 0.0,
-        "reward_low_hunger": 0.0,
-        "proximity_gating_threshold": 0.5,
-        "reward_food_visible_proximity": 0.15,
-        "proximity_only_when_hungry": True,
-        "reward_enemy_damage_taken": 0.0,
-        "reward_enemy_proximity": -0.5,
-        "reward_shelter_proximity": 0.15,
-        "reward_shelter_safety": 0.0,
-        "reward_survival_tick": 0.0,
-        "frame_stack": 4,
-    },
-
-    # Headline minimal cells at cap=50000. We initially ran minimal at
-    # cap=1000 and observed that the agent reached the cap in a
-    # non-negligible fraction of episodes (the minimal reward is not
-    # intentionally misspecified, so the agent survives longer). The
-    # cap is therefore raised to 50000 for the minimal cells to remove
-    # right-censoring. The misspecified configurations (baseline,
-    # absolute_proximity) reached the cap in only a negligible fraction
-    # of episodes and are left at the original cap=1000.
-    "engineered_v5_cap50k": {
+    #
+    # Episode cap is raised to 50000 (vs. 1000 for the misspecified
+    # configurations). The minimal reward is not intentionally
+    # misspecified, so the agent survives longer; at cap=1000 a
+    # non-negligible fraction of episodes were right-censored.
+    "minimal_cap50k": {
         "max_steps": 50_000,
         "reward_food_eaten": 0.0,
         "reward_starvation_damage": 0.0,
@@ -108,7 +72,7 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
         "reward_shelter_safety": 0.0,
         "reward_survival_tick": 0.0,
     },
-    "engineered_v5_fs_cap50k": {
+    "minimal_fs_cap50k": {
         "max_steps": 50_000,
         "reward_food_eaten": 0.0,
         "reward_starvation_damage": 0.0,
@@ -127,15 +91,13 @@ EXPERIMENT_CONFIGS: Dict[str, Dict[str, Any]] = {
 
     # ------------------------------------------------------------------
     # Illustrative diagnostic (single-seed qualitative demo, not part of
-    # the main ablation). Kept to show one heuristic violation has the
-    # empirical consequence derived analytically.
+    # the main ablation). Food-proximity weight is set below the
+    # movement-cost break-even (0.02 < 0.0225), producing the predicted
+    # suicide failure mode: the agent cannot profitably move toward
+    # food, so the cheapest escape from the accumulating hunger penalty
+    # is to walk into an enemy and end the episode.
     # ------------------------------------------------------------------
 
-    # H1 violation: food-proximity weight below the movement-cost
-    # break-even (0.02 < 0.0225). The analytical prediction is the
-    # suicide failure mode: the agent cannot profitably move toward
-    # food, so the cheapest escape from the accumulating hunger
-    # penalty is to walk into an enemy and end the episode.
     "weak_proximity": {
         "reward_food_visible_proximity": 0.02,
     },

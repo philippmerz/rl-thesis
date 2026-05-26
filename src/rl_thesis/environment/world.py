@@ -53,7 +53,7 @@ class World:
         self.config = config
         self.seed = self.config.initial_seed
 
-        # Instance-level RNGs — avoid mutating global state (B5 fix).
+        # Instance-level RNG to avoid mutating the global random state.
         self._rng = random.Random(self.seed)
         
         # Initialize entities

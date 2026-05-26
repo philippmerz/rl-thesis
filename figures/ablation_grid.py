@@ -1,8 +1,8 @@
 """Reward x observation ablation grid.
 
 One figure summarising the ablation: 3 reward configurations
-(baseline, absolute_proximity, engineered_v5) crossed with two
-observation types (single-frame, 4-frame stack), three seeds each.
+(baseline, absolute_proximity, minimal) crossed with two
+observation types (single-frame, 4-frame stack), four seeds each.
 
 Reads from vast_logs/bench_summary.csv (parsed from per-cell
 100-episode benchmark logs). The figure has three panels:
@@ -31,8 +31,8 @@ CELLS = [
     ("baseline_fs",           "Baseline",         "fs"),
     ("absolute_proximity",    "Abs. proximity",   "sf"),
     ("absolute_proximity_fs", "Abs. proximity",   "fs"),
-    ("engineered_v5_cap50k",        "Minimal",          "sf"),
-    ("engineered_v5_fs_cap50k",     "Minimal",          "fs"),
+    ("minimal_cap50k",              "Minimal",          "sf"),
+    ("minimal_fs_cap50k",           "Minimal",          "fs"),
 ]
 SF_COLOR = "#4477aa"
 FS_COLOR = "#ee6677"
@@ -119,23 +119,27 @@ def make_figure():
 
     # Panel 3: Frame-stacking effect (fs - sf) per reward
     ax = axes[2]
-    rewards = ["baseline", "absolute_proximity", "engineered_v5_cap50k"]
-    reward_labels = ["Baseline", "Abs. proximity", "Minimal"]
+    reward_pairs = [
+        ("baseline",          "baseline_fs",          "Baseline"),
+        ("absolute_proximity", "absolute_proximity_fs", "Abs. proximity"),
+        ("minimal_cap50k",    "minimal_fs_cap50k",    "Minimal"),
+    ]
+    reward_labels = [p[2] for p in reward_pairs]
     deltas = []
-    for r in rewards:
+    for sf_key, fs_key, _ in reward_pairs:
         # Round cell means before subtracting so the displayed delta matches
         # the rounded survival values in Table 3 (otherwise a 0.5-tick rounding
         # gap can push the delta off by one).
-        sf_mean = round(statistics.mean(float(x["d_surv"]) for x in grouped[r]))
-        fs_mean = round(statistics.mean(float(x["d_surv"]) for x in grouped[r.replace("_cap50k", "_fs_cap50k") if "cap50k" in r else r + "_fs"]))
+        sf_mean = round(statistics.mean(float(x["d_surv"]) for x in grouped[sf_key]))
+        fs_mean = round(statistics.mean(float(x["d_surv"]) for x in grouped[fs_key]))
         deltas.append(fs_mean - sf_mean)
     bar_colors = ["#cc6677" if d < 0 else "#117733" for d in deltas]
-    bars = ax.bar(np.arange(len(rewards)), deltas, color=bar_colors,
+    bars = ax.bar(np.arange(len(reward_pairs)), deltas, color=bar_colors,
                   edgecolor="black", linewidth=0.5)
     ax.axhline(0, color="black", linewidth=0.7)
     ax.set_ylabel("Mean survival difference (ticks)")
     ax.set_title("Effect of 4-frame stacking")
-    ax.set_xticks(np.arange(len(rewards)))
+    ax.set_xticks(np.arange(len(reward_pairs)))
     ax.set_xticklabels(reward_labels, rotation=0, ha="center", fontsize=9)
     for xi, d in enumerate(deltas):
         offset = 5 if d > 0 else -10
