@@ -2,15 +2,32 @@
 __pycache__/
 *.py[cod]
 
+# Tooling caches
+.mypy_cache
+.pytest_cache
+.ruff_cache
+
+# Build / packaging artifacts
+*.egg-info
+build
+dist
+
+# Editor / OS
 CLAUDE.md
 .claude
 .vscode
+.DS_Store
+
+# Local virtualenv
+.venv
+
+# Training outputs and evaluation logs
 checkpoints
 logs
 runs
-runs_vm
-archived
-deploy
+eval_logs
+
+# LaTeX build artifacts (intermediate files; the final PDF lives in latex/original/out/)
 latex/*/out
 latex/*/thesis.aux
 latex/*/thesis.bbl
@@ -22,6 +39,3 @@ latex/*/thesis.out
 latex/*/thesis.pdf
 latex/*/thesis.synctex.gz
 latex/*/thesis.toc
-.venv
-.DS_Store
-vast_logs
