@@ -2,7 +2,7 @@
 
 For each ablation cell (config x seed) and the heuristic, replay
 100 evaluation episodes and dump per-episode behavioural statistics
-to ``vast_logs/per_episode/<config>_seed_<seed>.csv``.
+to ``eval_logs/per_episode/<config>_seed_<seed>.csv``.
 
 Columns: episode, seed, survival, food_eaten, damage_taken,
 final_health, final_hunger, terminated, shelter_ticks,
@@ -42,7 +42,7 @@ CELLS = [
 ]
 NUM_EPISODES = 100
 START_SEED = 1000
-OUT_DIR = REPO_ROOT / "vast_logs" / "per_episode"
+OUT_DIR = REPO_ROOT / "eval_logs" / "per_episode"
 COLUMNS = [
     "episode", "seed", "survival", "food_eaten", "damage_taken",
     "final_health", "final_hunger", "terminated",
@@ -151,41 +151,37 @@ def rollout_dqn(checkpoint: str, world_config: WorldConfig):
 
 
 def main():
+    from dataclasses import replace
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", type=str, default=None,
-                    help="Limit to a config name (run all its seeds + heuristic).")
+                    help="Limit to a config name (still runs both heuristics).")
     ap.add_argument("--skip-existing", action="store_true",
                     help="Do not regenerate CSVs that already exist.")
-    ap.add_argument("--max-steps", type=int, default=None,
-                    help="Override episode cap. Default keeps the WorldConfig default of 1000.")
-    ap.add_argument("--out-suffix", type=str, default="",
-                    help="Suffix appended to output CSV filenames (before .csv); useful for "
-                         "side-by-side runs at different caps.")
     args = ap.parse_args()
 
     cells = [c for c in CELLS if args.only is None or c[0] == args.only]
 
-    def maybe_lift_cap(cfg: WorldConfig) -> WorldConfig:
-        if args.max_steps is None:
-            return cfg
-        from dataclasses import replace
-        return replace(cfg, max_steps=args.max_steps)
-
-    suffix = args.out_suffix
-    heuristic_world = maybe_lift_cap(WorldConfig())
-    h_path = OUT_DIR / f"heuristic{suffix}.csv"
-    if not (args.skip_existing and h_path.exists()):
-        print(f"[heuristic] {NUM_EPISODES} episodes (max_steps={heuristic_world.max_steps})")
-        rows = rollout_heuristic(heuristic_world)
+    # Heuristic at both episode caps: cap=1000 pairs with the misspecified
+    # cells, cap=50000 pairs with the minimal cells.
+    for cap, suffix in [(1000, ""), (50000, "_cap50k")]:
+        h_path = OUT_DIR / f"heuristic{suffix}.csv"
+        if args.skip_existing and h_path.exists():
+            print(f"[skip] heuristic cap={cap}: csv exists")
+            continue
+        h_world = replace(WorldConfig(), max_steps=cap)
+        print(f"[heuristic cap={cap}] {NUM_EPISODES} episodes")
+        rows = rollout_heuristic(h_world)
         write_rows(h_path, rows)
         print(f"  wrote {h_path}")
 
+    # Each cell runs at its own natural cap, taken from its WorldConfig.
     for config, seed in cells:
         ckpt = REPO_ROOT / "runs" / config / f"seed_{seed}" / "checkpoints" / "model_best.pt"
         if not ckpt.exists():
             print(f"[skip] {config} seed={seed}: no checkpoint at {ckpt}")
             continue
-        out_path = OUT_DIR / f"{config}_seed_{seed}{suffix}.csv"
+        out_path = OUT_DIR / f"{config}_seed_{seed}.csv"
         if args.skip_existing and out_path.exists():
             print(f"[skip] {config} seed={seed}: csv exists")
             continue
@@ -193,7 +189,6 @@ def main():
             world_config = make_world_config(config)
         except Exception:
             world_config = WorldConfig()
-        world_config = maybe_lift_cap(world_config)
         print(f"[{config} seed={seed}] {NUM_EPISODES} episodes (max_steps={world_config.max_steps})")
         rows = rollout_dqn(str(ckpt), world_config)
         write_rows(out_path, rows)

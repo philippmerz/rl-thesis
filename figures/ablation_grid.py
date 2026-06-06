@@ -4,7 +4,7 @@ One figure summarising the ablation: 3 reward configurations
 (baseline, absolute_proximity, minimal) crossed with two
 observation types (single-frame, 4-frame stack), four seeds each.
 
-Reads from vast_logs/bench_summary.csv (parsed from per-cell
+Reads from eval_logs/bench_summary.csv (parsed from per-cell
 100-episode benchmark logs). The figure has three panels:
 
   1. Mean survival per cell (DQN bars), with the heuristic
@@ -41,7 +41,7 @@ HEUR_COLOR = "#444444"
 
 def load_cells():
     """Group bench rows by config; return {config: [{...}, ...]}."""
-    csv_path = REPO_ROOT / "vast_logs" / "bench_summary.csv"
+    csv_path = REPO_ROOT / "eval_logs" / "bench_summary.csv"
     grouped = defaultdict(list)
     for row in csv.DictReader(open(csv_path)):
         grouped[row["config"]].append(row)

@@ -32,7 +32,7 @@ import numpy as np
 from figures.common import REPO_ROOT, save_figure, setup_style
 
 
-PER_EPISODE_DIR = REPO_ROOT / "vast_logs" / "per_episode"
+PER_EPISODE_DIR = REPO_ROOT / "eval_logs" / "per_episode"
 CELLS = [
     ("baseline",              "Baseline (sf)"),
     ("baseline_fs",           "Baseline (fs)"),

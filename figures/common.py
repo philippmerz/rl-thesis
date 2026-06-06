@@ -1,7 +1,7 @@
 """Shared utilities for thesis figure generation.
 
 Each figure script reads eval.csv files from ``runs/`` and writes a PDF
-into ``latex/original/figures/``. Scripts are idempotent; rerunning
+into ``latex/figures/``. Scripts are idempotent; rerunning
 regenerates the figures from the source data.
 
 Run from the repository root: ``python -m figures.<figure_name>``.
@@ -18,7 +18,7 @@ import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RUNS_DIR = REPO_ROOT / "runs"
-OUT_DIR = REPO_ROOT / "latex" / "original" / "figures"
+OUT_DIR = REPO_ROOT / "latex" / "figures"
 
 
 # Eval CSV column layout (from training/metrics.py)
