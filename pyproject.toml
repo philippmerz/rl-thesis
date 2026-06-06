@@ -8,7 +8,9 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "matplotlib>=3.8",
     "numpy>=1.26",
+    "pandas>=2.0",
     "pygame>=2.5",
     "torch>=2.4",
     "tqdm>=4.66",
