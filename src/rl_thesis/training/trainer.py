@@ -3,6 +3,7 @@ Main training loop: episode collection, evaluation, checkpointing, metrics loggi
 """
 from __future__ import annotations
 
+import csv
 import shutil
 import sys
 from collections import deque
@@ -61,8 +62,27 @@ class Trainer:
         self._frame_stack = dqn_config.frame_stack
 
         self._latest_checkpoint_step = self._discover_latest_checkpoint_step()
-        self._best_eval_survival = -float('inf')
+        self._best_eval_survival = self._restore_best_eval_survival()
         self._show_progress = sys.stdout.isatty()
+
+    def _restore_best_eval_survival(self) -> float:
+        """Best in-training eval survival seen so far, recovered from eval.csv.
+
+        On a fresh run the log is absent and this is -inf. On resume it returns
+        the historical maximum, so a worse post-resume evaluation cannot
+        overwrite a better ``model_best`` (the eval log is append-only and
+        survives restarts, unlike the in-memory best tracker)."""
+        eval_path = self.log_dir / "eval.csv"
+        if not eval_path.exists():
+            return -float('inf')
+        best = -float('inf')
+        try:
+            with open(eval_path, newline="") as f:
+                for row in csv.DictReader(f):
+                    best = max(best, float(row["eval_survival"]))
+        except (OSError, ValueError, KeyError):
+            return -float('inf')
+        return best
 
     @staticmethod
     def _make_env(world_config: WorldConfig, dqn_config: DQNConfig):
