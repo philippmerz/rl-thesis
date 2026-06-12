@@ -6,14 +6,25 @@ to ``eval_logs/per_episode/<config>_seed_<seed>.csv``.
 
 Columns: episode, seed, survival, food_eaten, damage_taken,
 final_health, final_hunger, terminated, shelter_ticks,
-first_food_tick, reward. ``reward`` is the undiscounted episode
-return under the cell's own reward configuration.
+first_food_tick, reward, stationary_ticks, osc_ticks,
+death_cause, final_enc_ticks, final_enc_net_delta. ``reward`` is
+the undiscounted episode return under the cell's own reward
+configuration. ``death_cause`` attributes the terminal damage
+(``enemy`` or ``starvation``; empty when the episode reached the
+cap). The ``final_enc_*`` columns describe the final encounter,
+the trailing run of ticks with an enemy visible ending at episode
+termination: its length and the net change in Manhattan distance
+to the nearest visible enemy attributable to the agent's own moves
+(enemy positions held fixed at their pre-step locations, so enemy
+movement is not misattributed to the agent; negative = the agent
+closed distance on net).
 
-The data feeds the failure-mode quantification figure and the
-learning-trajectory rationale: per-cell distributions are needed
-to compute proxies for stasis, suicide, and active-foraging-but-
-dying that aggregate statistics in the original benchmark logs
-do not expose.
+The data feeds the death-cause classification and the movement-
+composition table: per-cell distributions are needed to separate
+how episodes end (cap, suicide, failure to escape, starvation)
+from what the agent does with its time (stationary, oscillating,
+other movement), which aggregate statistics in the original
+benchmark logs do not expose.
 
 Run from repository root: python -m figures.dump_per_episode
 """
@@ -47,7 +58,70 @@ COLUMNS = [
     "episode", "seed", "survival", "food_eaten", "damage_taken",
     "final_health", "final_hunger", "terminated",
     "shelter_ticks", "first_food_tick", "reward",
+    "stationary_ticks", "osc_ticks",
+    "death_cause", "final_enc_ticks", "final_enc_net_delta",
 ]
+
+
+def _manhattan(a: tuple[int, int], b: tuple[int, int]) -> int:
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def _count_position_patterns(positions: list[tuple[int, int]]) -> tuple[int, int]:
+    """Count stationary and sustained period-2 oscillation ticks from a
+    position trace.
+
+    A stationary tick is one where the agent's position did not change from
+    the previous tick. An oscillation tick is one where the position equals
+    the position two ticks ago and differs from the previous tick (the agent
+    moved and undid the move), provided the same condition holds at an
+    adjacent tick. The cycle must therefore complete at least A,B,A,B; a
+    single move-and-undo (A,B,A) does not count. Together the two counts
+    decompose unproductive motion within the exposed-stasis failure mode.
+    """
+    stationary = sum(
+        1 for t in range(1, len(positions)) if positions[t] == positions[t - 1]
+    )
+    period2 = [
+        t >= 2 and positions[t] == positions[t - 2] and positions[t] != positions[t - 1]
+        for t in range(len(positions))
+    ]
+    osc = sum(
+        1 for t in range(len(positions))
+        if period2[t] and (period2[t - 1] or (t + 1 < len(positions) and period2[t + 1]))
+    )
+    return stationary, osc
+
+
+def _enemy_step_delta(prev_pos, new_pos, enemy_positions, radius):
+    """Agent-attributable distance change to the nearest visible enemy.
+
+    Enemy positions are taken before the step and held fixed, so the
+    delta reflects only the agent's own move. Returns ``None`` when no
+    enemy was visible (within ``radius`` of the agent) before the step.
+    """
+    visible = [e for e in enemy_positions if _manhattan(prev_pos, e) <= radius]
+    if not visible:
+        return None
+    nearest = min(visible, key=lambda e: _manhattan(prev_pos, e))
+    return _manhattan(new_pos, nearest) - _manhattan(prev_pos, nearest)
+
+
+def _final_encounter(deltas: list[int | None]) -> tuple[int, int]:
+    """Length and net distance change of the trailing enemy-visible run.
+
+    Walks backward from the final tick while an enemy was visible
+    (delta is not ``None``). The net sum is negative when the agent's
+    own moves closed distance to the enemy over the encounter.
+    """
+    length = 0
+    net = 0
+    for delta in reversed(deltas):
+        if delta is None:
+            break
+        length += 1
+        net += delta
+    return length, net
 
 
 def write_rows(out_path: Path, rows):
@@ -74,11 +148,21 @@ def rollout_heuristic(world_config: WorldConfig):
         tick = 0
         ep_food = 0
         ep_reward = 0.0
+        positions = [world.agent.position.as_tuple()]
+        enemy_deltas: list[int | None] = []
+        last_tick_enemy_hit = False
+        radius = world.config.observation_radius
         while True:
+            prev_pos = positions[-1]
+            enemies_prev = [e.position.as_tuple() for e in world.enemies]
             action = agent.select_action(world)
             _, reward, terminated, truncated, info = env.step(action)
             ep_reward += reward
             tick += 1
+            new_pos = world.agent.position.as_tuple()
+            positions.append(new_pos)
+            enemy_deltas.append(_enemy_step_delta(prev_pos, new_pos, enemies_prev, radius))
+            last_tick_enemy_hit = info.get("damage_taken", 0) > 0
             if world.agent.is_in_shelter:
                 shelter_ticks += 1
             if info.get("food_eaten"):
@@ -88,6 +172,11 @@ def rollout_heuristic(world_config: WorldConfig):
             if terminated or truncated:
                 break
         stats = env.get_episode_stats()
+        stationary, osc = _count_position_patterns(positions)
+        death_cause = ""
+        if stats["terminated_by_death"]:
+            death_cause = "enemy" if last_tick_enemy_hit else "starvation"
+        enc_ticks, enc_net = _final_encounter(enemy_deltas)
         rows.append([
             i, seed,
             int(stats["ticks_survived"]),
@@ -99,6 +188,11 @@ def rollout_heuristic(world_config: WorldConfig):
             shelter_ticks,
             first_food_tick,
             round(float(ep_reward), 4),
+            stationary,
+            osc,
+            death_cause,
+            enc_ticks,
+            enc_net,
         ])
     return rows
 
@@ -121,12 +215,24 @@ def rollout_dqn(checkpoint: str, world_config: WorldConfig):
         tick = 0
         ep_food = 0
         ep_reward = 0.0
+        world = base_env.get_world()
+        positions = [world.agent.position.as_tuple()]
+        enemy_deltas: list[int | None] = []
+        last_tick_enemy_hit = False
+        radius = world.config.observation_radius
         while True:
+            prev_pos = positions[-1]
+            enemies_prev = [e.position.as_tuple() for e in world.enemies]
             action = agent.select_action(state, training=False)
             state, reward, terminated, truncated, info = env.step(action)
             ep_reward += reward
             tick += 1
-            if base_env.get_world().agent.is_in_shelter:
+            world = base_env.get_world()
+            new_pos = world.agent.position.as_tuple()
+            positions.append(new_pos)
+            enemy_deltas.append(_enemy_step_delta(prev_pos, new_pos, enemies_prev, radius))
+            last_tick_enemy_hit = info.get("damage_taken", 0) > 0
+            if world.agent.is_in_shelter:
                 shelter_ticks += 1
             if info.get("food_eaten"):
                 ep_food += 1
@@ -135,6 +241,11 @@ def rollout_dqn(checkpoint: str, world_config: WorldConfig):
             if terminated or truncated:
                 break
         stats = base_env.get_episode_stats()
+        stationary, osc = _count_position_patterns(positions)
+        death_cause = ""
+        if stats["terminated_by_death"]:
+            death_cause = "enemy" if last_tick_enemy_hit else "starvation"
+        enc_ticks, enc_net = _final_encounter(enemy_deltas)
         rows.append([
             i, seed,
             int(stats["ticks_survived"]),
@@ -146,6 +257,11 @@ def rollout_dqn(checkpoint: str, world_config: WorldConfig):
             shelter_ticks,
             first_food_tick,
             round(float(ep_reward), 4),
+            stationary,
+            osc,
+            death_cause,
+            enc_ticks,
+            enc_net,
         ])
     return rows
 

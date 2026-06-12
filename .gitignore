@@ -28,14 +28,14 @@ runs
 eval_logs
 
 # LaTeX build artifacts (intermediate files; the final PDF lives in latex/original/out/)
-latex/*/out
-latex/*/thesis.aux
-latex/*/thesis.bbl
-latex/*/thesis.blg
-latex/*/thesis.fdb_latexmk
-latex/*/thesis.fls
-latex/*/thesis.log
-latex/*/thesis.out
-latex/*/thesis.pdf
-latex/*/thesis.synctex.gz
-latex/*/thesis.toc
+latex/out
+latex/thesis.aux
+latex/thesis.bbl
+latex/thesis.blg
+latex/thesis.fdb_latexmk
+latex/thesis.fls
+latex/thesis.log
+latex/thesis.out
+latex/thesis.pdf
+latex/thesis.synctex.gz
+latex/thesis.toc
