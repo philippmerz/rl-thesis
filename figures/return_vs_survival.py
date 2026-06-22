@@ -61,7 +61,7 @@ def make_figure() -> plt.Figure:
     for sf, fs, label in REWARD_CONFIGS:
         s_sf, r_sf = load_cell_means(sf)
         s_fs, r_fs = load_cell_means(fs)
-        points.append((r_fs - r_sf, s_fs - s_sf, label))
+        points.append((r_fs - r_sf, round(s_fs) - round(s_sf), label))
 
     xs = [p[0] for p in points]
     ys = [p[1] for p in points]
@@ -100,8 +100,8 @@ def make_figure() -> plt.Figure:
             fontsize=9,
         )
 
-    ax.set_xlabel(r"$\Delta$ mean episode return (single-frame $\to$ frame-stacked)")
-    ax.set_ylabel(r"$\Delta$ mean survival ticks (single-frame $\to$ frame-stacked)")
+    ax.set_xlabel(r"$\Delta$ mean episode return")
+    ax.set_ylabel(r"$\Delta$ mean survival ticks")
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
     ax.set_title("Frame-stacking effect by reward configuration")

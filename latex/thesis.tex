@@ -190,7 +190,7 @@ This propagates reward information faster at the cost of increased variance. Mod
 
 Beyond the algorithmic extensions above, two further design choices stabilize the optimization itself.
 
-The original DQN copies $\theta$ to $\theta^-$ every $C$ steps, which creates discontinuities in the target. The soft (Polyak) target update \citep{Lillicrap2016} replaces the hard copy with an exponential moving average, updating the target at every step:
+The original DQN copies $\theta$ to $\theta^-$ every $C$ steps, which creates discontinuities in the target. The soft target update \citep{Lillicrap2016} replaces the hard copy with an exponential moving average, updating the target at every step:
 \begin{equation}
 \theta^- \leftarrow (1 - \tau)\,\theta^- + \tau\,\theta,
 \end{equation}
@@ -529,7 +529,7 @@ Heuristic                          & $769 \pm 19$       & $1.19$ & $94\%$  & ---
 \end{tabular}
 \end{table}
 
-Prediction P1 held. Mean survival across the six cells ranges from $555$ (\textsc{baseline\_fs}) to $762$ (\textsc{minimal\_fs}), and \textsc{minimal\_fs} is the only cell that comes close to the heuristic. The second-best cell is \textsc{minimal} (single-frame) at $684$ ticks, trailing by $78$ ticks. The within-cell standard error of \textsc{minimal\_fs} is small enough that no other cell is consistent with matching its mean.
+Prediction P1 held. Mean survival across the six cells ranges from $555$ (\textsc{baseline\_fs}) to $762$ (\textsc{minimal\_fs}), and \textsc{minimal\_fs} is the only cell that comes close to the heuristic. The second-best cell is \textsc{minimal} (single-frame) at $684$ ticks, trailing \textsc{minimal\_fs} by $78$ ticks. The within-cell standard error of \textsc{minimal\_fs} is small enough that no other cell is consistent with matching its mean.
 
 P2 is not affirmed. Frame stacking lifts \textsc{minimal} from $684$ to $762$ ticks, but the paired gap to the heuristic is $-10.0$ ticks ($95\%$ CI $[-36, +16]$, $p = 0.45$). The confidence interval includes zero, so \textsc{minimal\_fs} could be tied with the heuristic, but we cannot show that it exceeds the heuristic. The original aim of the project was to raise DQN survival to or beyond the heuristic's level, and the data are consistent with that aim being met within statistical noise rather than affirming a clear excess.
 
@@ -750,7 +750,7 @@ Cell                              & seed 42 & seed 43 & seed 44 & seed 45 \\
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrrrrr}
 \toprule
-Cell & Cap & Enemy suicide & Failure to escape & Starvation & Sh.\ occ. \\
+Cell & Time cap & Enemy suicide & Failure to escape & Starvation & Sh.\ occ. \\
 \midrule
 Heuristic                          & $6.0$ & $2.0$ & $0.0$ & $\mathbf{92.0}$ & $82.1$ \\
 \midrule
