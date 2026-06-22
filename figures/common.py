@@ -20,6 +20,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RUNS_DIR = REPO_ROOT / "runs"
 OUT_DIR = REPO_ROOT / "latex" / "figures"
 
+# Text width of the thesis body in inches (A4, 2.5 cm margins:
+# 210 mm - 2 x 25 mm = 160 mm). Figures saved at this width are
+# included at \linewidth without further scaling, so their fonts
+# render at the true point sizes set in ``setup_style``.
+TEXT_WIDTH_IN = 160.0 / 25.4
+
 
 # Eval CSV column layout (from training/metrics.py)
 EVAL_COLUMNS = [

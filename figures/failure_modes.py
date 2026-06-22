@@ -31,7 +31,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from figures.common import REPO_ROOT, save_figure, setup_style
+from figures.common import REPO_ROOT, TEXT_WIDTH_IN, save_figure, setup_style
 
 
 PER_EPISODE_DIR = REPO_ROOT / "eval_logs" / "per_episode"
@@ -126,44 +126,52 @@ def heuristic_episodes() -> list[dict]:
 
 def make_figure() -> plt.Figure:
     setup_style()
-    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.0),
-                             gridspec_kw={"width_ratios": [3, 1]})
+    fig, axes = plt.subplots(1, 3, figsize=(TEXT_WIDTH_IN, 3.0),
+                             gridspec_kw={"width_ratios": [3.0, 1.0, 1.7]})
+
+    labels = [HEURISTIC_LABEL] + [c[1] for c in CELLS]
 
     # Panel 1: stacked bar chart of episode outcomes
     ax = axes[0]
-    labels = [HEURISTIC_LABEL] + [c[1] for c in CELLS]
     rows = [cell_fractions(heuristic_episodes())]
     rows += [aggregate(cfg, cell_fractions) for cfg, _ in CELLS]
 
     x = np.arange(len(labels))
     bottom = np.zeros(len(labels))
+    outcome_handles = []
     for cat in CATEGORIES:
         vals = np.array([r.get(cat, 0.0) for r in rows])
-        ax.bar(x, vals, bottom=bottom, label=CAT_LABELS[cat],
-               color=CAT_COLORS[cat], edgecolor="black", linewidth=0.4,
-               width=0.7)
+        bars = ax.bar(x, vals, bottom=bottom, label=CAT_LABELS[cat],
+                      color=CAT_COLORS[cat], edgecolor="black", linewidth=0.4,
+                      width=0.7)
+        outcome_handles.append(bars)
         bottom += vals
 
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=20, ha="right", fontsize=9)
+    ax.set_xticklabels(labels, rotation=40, ha="right", fontsize=8)
     ax.set_ylabel("Fraction of evaluation episodes")
     ax.set_ylim(0, 1.0)
-    ax.set_title("Episode outcomes over $100$ episodes per seed")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=4,
-              frameon=False, fontsize=9)
+    ax.set_title("Episode outcomes")
 
-    # Panel 2: shelter occupancy fraction per cell
-    ax = axes[1]
+    # Panel 3: shelter occupancy fraction per cell
+    ax = axes[2]
     sh_vals = [shelter_use(heuristic_episodes()).get("shelter_occupancy", 0.0)]
     sh_vals += [aggregate(cfg, shelter_use).get("shelter_occupancy", 0.0) for cfg, _ in CELLS]
     bar_colors = ["#444444"] + ["#4477aa" if "(sf)" in c[1] else "#ee6677" for c in CELLS]
-    ax.bar(np.arange(len(labels)), sh_vals, color=bar_colors,
+    ax.bar(x, sh_vals, color=bar_colors,
            edgecolor="black", linewidth=0.4, width=0.7)
-    ax.set_xticks(np.arange(len(labels)))
-    ax.set_xticklabels(labels, rotation=20, ha="right", fontsize=8)
-    ax.set_ylabel("Shelter occupancy (fraction of survived ticks)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=40, ha="right", fontsize=8)
+    ax.set_ylabel("Shelter occupancy")
     ax.set_ylim(0, 1.0)
     ax.set_title("Shelter use")
+
+    # Panel 2: vertical legend for the outcome categories, placed next to the
+    # episode-outcomes panel it describes.
+    ax = axes[1]
+    ax.axis("off")
+    ax.legend(handles=outcome_handles, labels=[CAT_LABELS[c] for c in CATEGORIES],
+              loc="center", frameon=False, fontsize=9, title="Outcome")
 
     return fig
 

@@ -1,7 +1,7 @@
 """Learning trajectories per ablation cell.
 
 Plots in-training evaluation survival vs training step for each of
-the six (reward x observation) cells. Each panel shows three seeds
+the six (reward x observation) cells. Each panel shows four seeds
 (smoothed with a 10-eval rolling mean) and the heuristic survival
 as a dashed reference. The figure motivates the choice of a
 2,000,000-step training budget: by ~1M steps every cell has reached
@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from figures.common import (
-    PALETTE, RUNS_DIR, load_eval, save_figure, setup_style, smooth,
+    PALETTE, RUNS_DIR, TEXT_WIDTH_IN, load_eval, save_figure, setup_style, smooth,
 )
 
 
@@ -40,10 +40,9 @@ def panel(ax, cfg: str, title: str, color: str) -> None:
             continue
         steps = df["step"].to_numpy() / 1e6
         ax.plot(steps, smooth(df["eval_survival"], SMOOTH_WINDOW),
-                color=color, alpha=0.85, linewidth=1.2,
-                label=f"seed {seed}")
+                color=color, alpha=0.85, linewidth=1.2, label="_nolegend_")
     ax.axhline(HEURISTIC_SURV, color=PALETTE.heuristic, linestyle="--",
-               linewidth=0.9, label=f"Heuristic ({HEURISTIC_SURV:.0f})")
+               linewidth=0.9, label="_nolegend_")
     ax.set_title(title, fontsize=10)
     ax.set_xlim(0, 2.0)
     ax.set_ylim(0, 850)
@@ -53,7 +52,7 @@ def panel(ax, cfg: str, title: str, color: str) -> None:
 def make_figure() -> plt.Figure:
     setup_style()
     plt.rcParams["figure.constrained_layout.use"] = False
-    fig, axes = plt.subplots(3, 2, figsize=(9.0, 7.6), sharex=True, sharey=True)
+    fig, axes = plt.subplots(3, 2, figsize=(TEXT_WIDTH_IN, 5.6), sharex=True, sharey=True)
 
     rows = [
         ("baseline",              "baseline_fs",           "Baseline"),
@@ -68,10 +67,20 @@ def make_figure() -> plt.Figure:
     axes[-1, 0].set_xlabel("Training step (millions)")
     axes[-1, 1].set_xlabel("Training step (millions)")
 
-    handles, labels = axes[0, 0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=4,
-               bbox_to_anchor=(0.5, 0.0), frameon=False, fontsize=9)
-    fig.tight_layout(rect=[0, 0.04, 1, 1])
+    # Seeds share a color within a panel, so the legend documents the
+    # colour coding (single-frame vs 4-frame, each a cluster of four seeds)
+    # rather than listing the four interchangeable seeds separately.
+    handles = [
+        plt.Line2D([], [], color=PALETTE.sf, linewidth=1.2,
+                   label="Single-frame seeds"),
+        plt.Line2D([], [], color=PALETTE.fs, linewidth=1.2,
+                   label="4-frame seeds"),
+        plt.Line2D([], [], color=PALETTE.heuristic, linestyle="--",
+                   linewidth=0.9, label=f"Heuristic ({HEURISTIC_SURV:.0f})"),
+    ]
+    fig.tight_layout(rect=[0, 0.07, 1, 1])
+    fig.legend(handles=handles, loc="lower center", ncol=3,
+               bbox_to_anchor=(0.5, 0.01), frameon=False, fontsize=9)
     return fig
 
 

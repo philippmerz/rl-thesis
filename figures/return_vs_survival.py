@@ -20,7 +20,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from figures.common import REPO_ROOT, save_figure, setup_style
+from figures.common import REPO_ROOT, TEXT_WIDTH_IN, save_figure, setup_style
 
 
 PER_EPISODE_DIR = REPO_ROOT / "eval_logs" / "per_episode"
@@ -55,7 +55,7 @@ def load_cell_means(cell: str) -> tuple[float, float]:
 
 def make_figure() -> plt.Figure:
     setup_style()
-    fig, ax = plt.subplots(figsize=(6.6, 4.6))
+    fig, ax = plt.subplots(figsize=(0.78 * TEXT_WIDTH_IN, 3.4))
 
     points = []
     for sf, fs, label in REWARD_CONFIGS:

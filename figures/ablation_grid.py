@@ -23,7 +23,7 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
 
-from figures.common import REPO_ROOT, save_figure, setup_style
+from figures.common import REPO_ROOT, TEXT_WIDTH_IN, save_figure, setup_style
 
 
 CELLS = [
@@ -71,7 +71,7 @@ def make_figure():
     grouped = load_cells()
     h_surv = heuristic_reference(grouped)
 
-    fig, axes = plt.subplots(1, 3, figsize=(12.0, 3.6))
+    fig, axes = plt.subplots(1, 3, figsize=(TEXT_WIDTH_IN, 2.8))
 
     labels = [c[1] for c in CELLS]
     obs_types = [c[2] for c in CELLS]
@@ -140,7 +140,7 @@ def make_figure():
     ax.set_ylabel("Mean survival difference (ticks)")
     ax.set_title("Effect of 4-frame stacking")
     ax.set_xticks(np.arange(len(reward_pairs)))
-    ax.set_xticklabels(reward_labels, rotation=0, ha="center", fontsize=9)
+    ax.set_xticklabels(reward_labels, rotation=30, ha="right", fontsize=8)
     for xi, d in enumerate(deltas):
         offset = 5 if d > 0 else -10
         ax.text(xi, d + offset, f"{d:+.0f}",

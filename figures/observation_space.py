@@ -10,7 +10,7 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 
-from figures.common import save_figure, setup_style
+from figures.common import TEXT_WIDTH_IN, save_figure, setup_style
 
 
 def _sample_state(seed: int = 0):
@@ -37,7 +37,7 @@ def _sample_state(seed: int = 0):
 
 def make_figure():
     setup_style()
-    fig = plt.figure(figsize=(8.0, 3.2))
+    fig = plt.figure(figsize=(TEXT_WIDTH_IN, 2.5))
     gs = fig.add_gridspec(1, 4, width_ratios=[1, 1, 1, 1.05], wspace=0.25)
 
     enemies, food, shelter = _sample_state()

@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.collections import LineCollection
 
-from figures.common import REPO_ROOT, save_figure, setup_style
+from figures.common import REPO_ROOT, TEXT_WIDTH_IN, save_figure, setup_style
 
 
 TRACE_DIR = REPO_ROOT / "eval_logs" / "trajectories"
@@ -120,7 +120,7 @@ def plot_panel(ax, cell: str, label: str, summary_row: dict) -> None:
 
 def make_figure() -> plt.Figure:
     setup_style()
-    fig, axes = plt.subplots(2, 3, figsize=(9.5, 6.8))
+    fig, axes = plt.subplots(2, 3, figsize=(TEXT_WIDTH_IN, 4.6))
     summary = load_summary()
 
     for r, row in enumerate(PANELS):
@@ -147,8 +147,8 @@ def make_figure() -> plt.Figure:
         plt.Line2D([], [], marker="s", color="w", markerfacecolor=CAP_COLOR,
                    markeredgecolor="white", markersize=9, label="Time cap"),
     ]
-    fig.legend(handles=legend_handles, loc="lower center", ncol=5,
-               bbox_to_anchor=(0.5, -0.01), frameon=False, fontsize=9)
+    fig.legend(handles=legend_handles, loc="outside lower center", ncol=5,
+               frameon=False, fontsize=9)
 
     # Colorbar for time direction (shared)
     from matplotlib.cm import ScalarMappable
