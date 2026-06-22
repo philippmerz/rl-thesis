@@ -28,7 +28,6 @@ runs
 eval_logs
 
 # LaTeX build artifacts (intermediate files; the final PDF lives in latex/original/out/)
-latex/out
 latex/thesis.aux
 latex/thesis.bbl
 latex/thesis.blg

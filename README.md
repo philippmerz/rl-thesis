@@ -2,7 +2,9 @@
 
 Reward shape and frame stacking in DQN: a reward × observation ablation in multi-objective grid survival.
 
-A Rainbow-lite DQN agent learns to survive on a 64×64 grid by foraging food, avoiding enemies, and using shelters. The codebase studies how reward function design and observation context (frame stacking) interact, and supports a written bachelor's thesis. The full PDF is in `latex/out/thesis.pdf`.
+📄 **[Read the thesis (PDF)](latex/thesis.pdf)**
+
+A Rainbow-lite DQN agent learns to survive on a 64×64 grid by foraging food, avoiding enemies, and using shelters. The codebase studies how reward function design and observation context (frame stacking) interact, and supports a written bachelor's thesis. The full PDF is in [`latex/thesis.pdf`](latex/thesis.pdf).
 
 ## Install
 
@@ -70,13 +72,16 @@ Reports mean survival, food eaten, damage taken, and death rate, with a paired t
 
 Assumes every cell has been trained, i.e. `runs/<config>/seed_<N>/checkpoints/model_best.pt` exists for the six ablation cells × seeds 42–45 and for `weak_proximity/seed_42`. Three commands take you from checkpoints to figures and tables.
 
-### 1. Dump per-episode evaluation data
+### 1. Dump per-episode and trajectory data
 
 ```
 uv run python -m figures.dump_per_episode
+uv run python -m figures.dump_trajectories
 ```
 
-For each (config, seed), loads `model_best.pt` and replays 100 evaluation episodes on the deterministic seed range 1000–1099. Also runs the scripted heuristic at both episode caps (cap=1000 for misspecified cells, cap=50000 for minimal cells). Writes one CSV per cell × seed plus `heuristic.csv` and `heuristic_cap50k.csv` into `eval_logs/per_episode/`. Slow — roughly 1–2 hours for the full sweep. Use `--skip-existing` to incrementally fill in only what's missing, or `--only <config>` to redo one cell.
+`dump_per_episode` loads each cell's `model_best.pt` and replays 100 evaluation episodes on the deterministic seed range 1000–1099, also running the scripted heuristic at both episode caps (cap=1000 for misspecified cells, cap=50000 for minimal cells). It writes one CSV per cell × seed plus `heuristic.csv` and `heuristic_cap50k.csv` into `eval_logs/per_episode/`. Slow — roughly 1–2 hours for the full sweep. Use `--skip-existing` to incrementally fill in only what's missing, or `--only <config>` to redo one cell.
+
+`dump_trajectories` reads those per-episode CSVs to pick one representative (median-survival) episode per cell, replays it, and writes the per-tick position traces to `eval_logs/trajectories/` for the trajectory figure. Run it after `dump_per_episode`.
 
 ### 2. Aggregate into tables
 
@@ -98,19 +103,23 @@ uv run python -m figures.ablation_grid
 uv run python -m figures.failure_modes
 uv run python -m figures.learning_curves
 uv run python -m figures.observation_space
+uv run python -m figures.return_vs_survival
+uv run python -m figures.trajectories
 ```
 
-Each writes a PDF into `latex/figures/`. `failure_modes` also writes `eval_logs/per_episode/failure_mode_summary.csv` (the failure-mode appendix table) as a side effect.
+Each writes a PDF into `latex/figures/`. `failure_modes` also writes `eval_logs/per_episode/outcome_summary.csv` (episode-outcome and shelter table) and `movement_summary.csv` (movement-composition table) as a side effect.
 
 ### Artifact map
 
 | Thesis artifact | Producer | Underlying data |
 |---|---|---|
-| Table 3 (cell means + SEM) | `figures/aggregate.py` | `eval_logs/bench_summary.csv` |
-| Table 4 (per-cell paired CIs) | `figures/aggregate.py` | `eval_logs/cell_paired_tests.csv` |
-| Failure-mode appendix table | `figures/failure_modes.py` | `eval_logs/per_episode/failure_mode_summary.csv` |
+| Cell results table (means, SEM, paired CIs) | `figures/aggregate.py` | `eval_logs/bench_summary.csv`, `eval_logs/cell_paired_tests.csv` |
+| Movement-composition table | `figures/failure_modes.py` | `eval_logs/per_episode/movement_summary.csv` |
+| Episode-outcome + shelter table (appendix) | `figures/failure_modes.py` | `eval_logs/per_episode/outcome_summary.csv` |
 | `ablation_grid.pdf` | `figures/ablation_grid.py` | `eval_logs/bench_summary.csv` |
 | `failure_modes.pdf` | `figures/failure_modes.py` | `eval_logs/per_episode/*.csv` |
+| `return_vs_survival.pdf` | `figures/return_vs_survival.py` | `eval_logs/per_episode/*.csv` |
+| `trajectories.pdf` | `figures/trajectories.py` | `eval_logs/trajectories/*.csv` (from `dump_trajectories.py`) |
 | `learning_curves.pdf` | `figures/learning_curves.py` | `runs/<cfg>/seed_<N>/logs/eval.csv` |
 | `observation_space.pdf` | `figures/observation_space.py` | (synthetic sample, no run data) |
 
@@ -123,4 +132,4 @@ Each writes a PDF into `latex/figures/`. `failure_modes` also writes `eval_logs/
 - `src/rl_thesis/demo/` pygame visualization
 - `figures/` thesis figure scripts
 - `eval_logs/` per-episode benchmark CSVs and bench summary
-- `latex/` thesis LaTeX source (`thesis.tex`, `refs.bib`, `figures/`); built PDF in `latex/out/`
+- `latex/` thesis LaTeX source (`thesis.tex`, `refs.bib`, `figures/`); built PDF at `latex/thesis.pdf`
