@@ -137,7 +137,7 @@ class VisualizationConfig:
     health_bar_color: Tuple[int, int, int] = (220, 20, 60)  # Crimson
     hunger_bar_color: Tuple[int, int, int] = (255, 165, 0)  # Orange
     
-    tick_duration_ms: int = 10           # For human observer
+    tick_duration_ms: int = 50           # For human observer
 
 @dataclass
 class DQNConfig:
