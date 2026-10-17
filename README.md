@@ -18,7 +18,11 @@ uv sync
 
 ## Demo
 
-Watch a trained agent or the scripted heuristic play in a pygame window.
+A short policy demo in the survival environment (17 seconds).
+
+https://github.com/user-attachments/assets/eea2e207-129c-448a-b16b-60f613e86e76
+
+Run a trained agent or the scripted heuristic locally in a pygame window:
 
 ```
 # Heuristic baseline (default)
